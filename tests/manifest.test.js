@@ -36,6 +36,21 @@ test("popup and offscreen helper expose the intended stable controls", async () 
   assert.match(popup, />Clear picked content</);
   assert.match(popup, /id="copy-text"/);
   assert.match(popup, />Copy all text</);
-  assert.match(await readFile(new URL("content.js", root), "utf8"), /data-message-author-role/);
   assert.match(offscreen, /<script type="module" src="offscreen\.js"><\/script>/);
+});
+
+test("Markdown transcript download is wired end to end", async () => {
+  const [popup, content, background, offscreen] = await Promise.all([
+    readFile(new URL("popup.html", root), "utf8"),
+    readFile(new URL("content.js", root), "utf8"),
+    readFile(new URL("background.js", root), "utf8"),
+    readFile(new URL("offscreen.js", root), "utf8"),
+  ]);
+  assert.match(popup, /id="download-markdown"/);
+  assert.match(popup, />Download Markdown</);
+  assert.match(content, /data-message-author-role/);
+  assert.match(content, /EXTRACT_MARKDOWN/);
+  assert.match(background, /DOWNLOAD_MARKDOWN/);
+  assert.match(offscreen, /MAKE_MARKDOWN_URL/);
+  assert.match(offscreen, /text\/markdown;charset=utf-8/);
 });

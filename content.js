@@ -381,8 +381,185 @@
       .join("\n\n");
   }
 
-  /** Copies all visible text from the selected or automatically detected source. */
-  async function extractText() {
+  function escapeMarkdownText(text) {
+    return text
+      .replace(/\\/g, "\\\\")
+      .replace(/([*_`\[\]])/g, "\\$1")
+      .replace(/</g, "\\<")
+      .replace(/>/g, "\\>");
+  }
+
+  function normalizeMarkdown(markdown) {
+    const output = [];
+    let fenceCharacter = "";
+    let fenceLength = 0;
+    let previousWasBlank = false;
+
+    for (const sourceLine of markdown.replace(/\r\n?/g, "\n").split("\n")) {
+      const line = fenceCharacter ? sourceLine : sourceLine.replace(/[ \t]+$/g, "");
+      const fence = line.trimStart().match(/^(`{3,}|~{3,})/);
+      if (fence) {
+        const character = fence[1][0];
+        if (!fenceCharacter) {
+          fenceCharacter = character;
+          fenceLength = fence[1].length;
+        } else if (character === fenceCharacter && fence[1].length >= fenceLength) {
+          fenceCharacter = "";
+          fenceLength = 0;
+        }
+        output.push(line);
+        previousWasBlank = false;
+        continue;
+      }
+
+      if (fenceCharacter) {
+        output.push(line);
+      } else if (!line.trim()) {
+        if (output.length && !previousWasBlank) output.push("");
+        previousWasBlank = true;
+      } else {
+        output.push(line);
+        previousWasBlank = false;
+      }
+    }
+
+    while (output.at(-1) === "") output.pop();
+    return output.join("\n").trim();
+  }
+
+  function shouldSkipMarkdownElement(element) {
+    if (element.hasAttribute(ATTR.hidden) || element.hidden || element.getAttribute("aria-hidden") === "true") return true;
+    if (["BUTTON", "INPUT", "SELECT", "TEXTAREA", "SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE", "SVG", "CANVAS", "AUDIO", "VIDEO", "FORM"].includes(element.tagName)) {
+      return true;
+    }
+    return ["button", "toolbar", "navigation", "dialog", "textbox", "complementary"].includes(element.getAttribute("role"));
+  }
+
+  function markdownFence(text, minimum = 1) {
+    const longest = Math.max(0, ...[...text.matchAll(/`+/g)].map((match) => match[0].length));
+    return "`".repeat(Math.max(minimum, longest + 1));
+  }
+
+  function renderMarkdownChildren(element, context = {}) {
+    return [...element.childNodes].map((child) => renderMarkdownNode(child, context)).join("");
+  }
+
+  function renderMarkdownList(list, depth = 0) {
+    const ordered = list.tagName === "OL";
+    const start = ordered ? Number.parseInt(list.getAttribute("start") || "1", 10) : 1;
+    const indent = "  ".repeat(depth);
+    const lines = [];
+    const items = [...list.children].filter((child) => child.tagName === "LI");
+
+    items.forEach((item, index) => {
+      const nestedLists = [...item.children].filter((child) => child.tagName === "UL" || child.tagName === "OL");
+      const body = normalizeMarkdown(
+        [...item.childNodes]
+          .filter((child) => !(child.nodeType === Node.ELEMENT_NODE && (child.tagName === "UL" || child.tagName === "OL")))
+          .map((child) => renderMarkdownNode(child))
+          .join(""),
+      );
+      const marker = ordered ? `${start + index}. ` : "- ";
+      const bodyLines = body ? body.split("\n") : [""];
+      lines.push(`${indent}${marker}${bodyLines[0]}`);
+      for (const continuation of bodyLines.slice(1)) lines.push(`${indent}  ${continuation}`);
+      for (const nested of nestedLists) lines.push(renderMarkdownList(nested, depth + 1));
+    });
+    return lines.join("\n");
+  }
+
+  function renderMarkdownTable(table) {
+    const rows = [...table.rows]
+      .map((row) => [...row.cells].map((cell) => (
+        normalizeMarkdown(renderMarkdownChildren(cell))
+          .replace(/\n+/g, "<br>")
+          .replace(/\|/g, "\\|")
+      )))
+      .filter((row) => row.length);
+    if (!rows.length) return "";
+    const width = Math.max(...rows.map((row) => row.length));
+    const padded = rows.map((row) => [...row, ...Array(width - row.length).fill("")]);
+    return [
+      `| ${padded[0].join(" | ")} |`,
+      `| ${Array(width).fill("---").join(" | ")} |`,
+      ...padded.slice(1).map((row) => `| ${row.join(" | ")} |`),
+    ].join("\n");
+  }
+
+  function renderMarkdownNode(node, context = {}) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = context.preformatted ? node.nodeValue || "" : (node.nodeValue || "").replace(/\s+/g, " ");
+      return context.preformatted ? text : escapeMarkdownText(text);
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return "";
+
+    const element = node;
+    if (shouldSkipMarkdownElement(element)) return "";
+    const tag = element.tagName;
+    if (tag === "BR") return "\n";
+    if (tag === "HR") return "\n\n---\n\n";
+
+    if (tag === "PRE") {
+      const codeElement = element.querySelector("code");
+      const code = (codeElement?.textContent || element.textContent || "").replace(/^\n/, "").replace(/\n+$/, "");
+      const language = codeElement?.className.match(/(?:^|\s)language-([\w+-]+)/)?.[1] || "";
+      const fence = markdownFence(code, 3);
+      return `\n\n${fence}${language}\n${code}\n${fence}\n\n`;
+    }
+    if (tag === "CODE") {
+      const code = (element.textContent || "").replace(/\s+/g, " ");
+      const fence = markdownFence(code);
+      const padding = /^`|`$|^\s|\s$/.test(code) ? " " : "";
+      return `${fence}${padding}${code}${padding}${fence}`;
+    }
+
+    if (/^H[1-6]$/.test(tag)) {
+      const level = Number(tag[1]);
+      return `\n\n${"#".repeat(level)} ${normalizeMarkdown(renderMarkdownChildren(element))}\n\n`;
+    }
+    if (tag === "STRONG" || tag === "B") return `**${renderMarkdownChildren(element)}**`;
+    if (tag === "EM" || tag === "I") return `*${renderMarkdownChildren(element)}*`;
+    if (tag === "DEL" || tag === "S") return `~~${renderMarkdownChildren(element)}~~`;
+    if (tag === "A") {
+      const label = normalizeMarkdown(renderMarkdownChildren(element)).trim();
+      const href = element.href || element.getAttribute("href") || "";
+      if (!href || /^(javascript:|data:)/i.test(href) || label === href) return label || href;
+      return `[${label || href}](${href.replace(/\)/g, "%29")})`;
+    }
+    if (tag === "IMG") {
+      const alt = element.getAttribute("alt") || "Image";
+      const source = element.currentSrc || element.src || "";
+      return source && !/^(data:|blob:)/i.test(source) ? `![${escapeMarkdownText(alt)}](${source})` : `[Image: ${escapeMarkdownText(alt)}]`;
+    }
+    if (tag === "BLOCKQUOTE") {
+      const quote = normalizeMarkdown(renderMarkdownChildren(element));
+      return `\n\n${quote.split("\n").map((line) => `> ${line}`).join("\n")}\n\n`;
+    }
+    if (tag === "UL" || tag === "OL") return `\n\n${renderMarkdownList(element)}\n\n`;
+    if (tag === "TABLE") return `\n\n${renderMarkdownTable(element)}\n\n`;
+
+    const children = renderMarkdownChildren(element, context);
+    if (["P", "DIV", "SECTION", "ARTICLE", "MAIN", "FIGURE", "FIGCAPTION", "DETAILS", "SUMMARY", "DL", "DT", "DD"].includes(tag)) {
+      return `\n\n${children}\n\n`;
+    }
+    return children;
+  }
+
+  function structuredMarkdown(target) {
+    const messages = [...target.querySelectorAll("[data-message-author-role]")]
+      .filter((element) => element.getAttribute("aria-hidden") !== "true" && getComputedStyle(element).display !== "none")
+      .map((element) => ({
+        role: element.getAttribute("data-message-author-role") || "",
+        markdown: normalizeMarkdown(renderMarkdownChildren(element)),
+      }))
+      .filter((message) => message.markdown);
+    if (messages.length < 2) return "";
+    return messages
+      .map((message) => `## ${speakerLabel(message.role)}\n\n${message.markdown}`)
+      .join("\n\n");
+  }
+
+  async function withCleanTextSource(mode, extract) {
     await restoreExport();
     state.pickerCleanup?.();
 
@@ -390,7 +567,7 @@
     if (!target) throw new Error("The page has no text source.");
 
     const context = {
-      mode: "text",
+      mode,
       target,
       marks: [],
       style: document.createElement("style"),
@@ -403,17 +580,33 @@
     const mark = makeMarker(context);
 
     try {
-      mark(document.documentElement, ATTR.root, "text");
+      mark(document.documentElement, ATTR.root, mode);
       markClutter(target, mark);
       context.style.textContent = BASE_EXPORT_CSS;
       document.documentElement.append(context.style);
       await settle(50);
-      const text = structuredTranscript(target) || normalizeExtractedText(target.innerText || "");
-      if (!text) throw new Error("No visible text was found in the selected content.");
-      return { text, description: describeElement(target) };
+      return await extract(target);
     } finally {
       await restoreExport();
     }
+  }
+
+  /** Copies all visible text from the selected or automatically detected source. */
+  async function extractText() {
+    return withCleanTextSource("text", async (target) => {
+      const text = structuredTranscript(target) || normalizeExtractedText(target.innerText || "");
+      if (!text) throw new Error("No visible text was found in the selected content.");
+      return { text, description: describeElement(target) };
+    });
+  }
+
+  /** Produces a portable Markdown transcript without page controls or action rows. */
+  async function extractMarkdown() {
+    return withCleanTextSource("markdown", async (target) => {
+      const markdown = structuredMarkdown(target) || normalizeMarkdown(renderMarkdownNode(target));
+      if (!markdown) throw new Error("No visible text was found in the selected content.");
+      return { markdown, description: describeElement(target) };
+    });
   }
 
   /** Applies reversible cleanup and returns the geometry needed by the exporter. */
@@ -645,6 +838,7 @@
       return status();
     },
     EXTRACT_TEXT: () => extractText(),
+    EXTRACT_MARKDOWN: () => extractMarkdown(),
     PREPARE_EXPORT: (message) => prepareExport(message.mode),
     SET_CAPTURE_POSITION: (message) => setCapturePosition(message.coverage),
     RESTORE_EXPORT: () => restoreExport(),

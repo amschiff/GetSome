@@ -12,13 +12,21 @@ function base64ToBytes(base64) {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.target !== "offscreen" || message.type !== "MAKE_PDF_URL") return false;
+  if (
+    message?.target !== "offscreen" ||
+    !["MAKE_PDF_URL", "MAKE_MARKDOWN_URL"].includes(message.type)
+  ) {
+    return false;
+  }
 
   try {
-    const bytes = Array.isArray(message.segments)
-      ? buildImagePdf(message.segments)
-      : base64ToBytes(message.base64);
-    const blob = new Blob([bytes], { type: "application/pdf" });
+    const blob = message.type === "MAKE_MARKDOWN_URL"
+      ? new Blob([message.markdown], { type: "text/markdown;charset=utf-8" })
+      : new Blob([
+        Array.isArray(message.segments)
+          ? buildImagePdf(message.segments)
+          : base64ToBytes(message.base64),
+      ], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
     urls.add(url);
     setTimeout(() => {

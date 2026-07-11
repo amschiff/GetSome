@@ -90,15 +90,28 @@ button small {
   gap: 8px;
 }
 
-.primary {
-  min-height: 76px;
-  border-color: color-mix(in srgb, Highlight 48%, Canvas);
-}
-
-.copy-button {
+.markdown-button {
   min-height: 62px;
   border-color: color-mix(in srgb, Highlight 62%, Canvas);
   background: color-mix(in srgb, Highlight 15%, Canvas);
+}
+
+.copy-button {
+  min-height: 54px;
+}
+
+.section-label {
+  margin-bottom: -4px;
+  color: color-mix(in srgb, CanvasText 58%, Canvas);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pdf-button {
+  min-height: 68px;
+  font-size: 12px;
 }
 
 .clear-button {

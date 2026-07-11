@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "GetSome",
-  "description": "Copy the useful text from a page or save it as a searchable or scrolling PDF.",
-  "version": "0.3.0",
+  "description": "Download useful page text as Markdown, copy it, or save a PDF fallback.",
+  "version": "0.4.0",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/page-16.png",
@@ -19,7 +19,7 @@
     "scripting"
   ],
   "action": {
-    "default_title": "Copy or save this page",
+    "default_title": "Download or capture this page",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/page-16.png",

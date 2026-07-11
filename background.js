@@ -49,13 +49,20 @@ async function sendToPage(tabId, type, extra = {}) {
   return response;
 }
 
-function suggestedFilename(title, mode) {
-  const cleanTitle = (title || "page")
+function cleanFilenameTitle(title) {
+  return (title || "page")
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 110) || "page";
-  return `${cleanTitle} - ${mode === "scrolling" ? "scrolling" : "clean"}.pdf`;
+}
+
+function suggestedPdfFilename(title, mode) {
+  return `${cleanFilenameTitle(title)} - ${mode === "scrolling" ? "scrolling" : "clean"}.pdf`;
+}
+
+function suggestedMarkdownFilename(title) {
+  return `${cleanFilenameTitle(title)}.md`;
 }
 
 async function ensureOffscreenDocument() {
@@ -69,7 +76,7 @@ async function ensureOffscreenDocument() {
     creatingOffscreenDocument = chrome.offscreen.createDocument({
       url: "offscreen.html",
       reasons: ["BLOBS"],
-      justification: "Create a temporary Blob URL for the generated PDF Save As dialog.",
+      justification: "Create a temporary Blob URL for a generated file's Save As dialog.",
     }).finally(() => {
       creatingOffscreenDocument = null;
     });
@@ -77,25 +84,40 @@ async function ensureOffscreenDocument() {
   await creatingOffscreenDocument;
 }
 
-async function savePdf(pdf, filename) {
+async function downloadFromOffscreen(message, filename, timeoutMessage) {
   await ensureOffscreenDocument();
-  const payload = pdf.kind === "segments" ? { segments: pdf.segments } : { base64: pdf.base64 };
   const response = await withTimeout(
     chrome.runtime.sendMessage({
       target: "offscreen",
-      type: "MAKE_PDF_URL",
-      ...payload,
+      ...message,
     }),
     120_000,
-    "PDF assembly did not finish within two minutes.",
+    timeoutMessage,
   );
-  if (!response?.ok) throw new Error(response?.error || "Could not prepare the PDF download.");
+  if (!response?.ok) throw new Error(response?.error || "Could not prepare the download.");
   await chrome.downloads.download({
     url: response.url,
     filename,
     saveAs: true,
     conflictAction: "uniquify",
   });
+}
+
+async function savePdf(pdf, filename) {
+  const payload = pdf.kind === "segments" ? { segments: pdf.segments } : { base64: pdf.base64 };
+  await downloadFromOffscreen(
+    { type: "MAKE_PDF_URL", ...payload },
+    filename,
+    "PDF assembly did not finish within two minutes.",
+  );
+}
+
+async function saveMarkdown(markdown, filename) {
+  await downloadFromOffscreen(
+    { type: "MAKE_MARKDOWN_URL", markdown },
+    filename,
+    "Markdown download preparation did not finish within two minutes.",
+  );
 }
 
 async function attachDebugger(tabId) {
@@ -227,7 +249,7 @@ async function exportPdf(tabId, mode) {
       await sendToPage(tabId, "RESTORE_EXPORT").catch(() => {});
     }
     await setBadge(tabId, "SAVE");
-    await savePdf(pdf, suggestedFilename(tab.title, mode));
+    await savePdf(pdf, suggestedPdfFilename(tab.title, mode));
   } finally {
     if (debuggerTarget) await chrome.debugger.detach(debuggerTarget).catch(() => {});
     await sendToPage(tabId, "RESTORE_EXPORT").catch(() => {});
@@ -236,9 +258,33 @@ async function exportPdf(tabId, mode) {
   }
 }
 
+async function downloadMarkdown(tabId) {
+  if (activeJobs.has(tabId)) throw new Error("A capture is already running for this tab.");
+  activeJobs.add(tabId);
+  await setBadge(tabId, "MD");
+
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.url?.match(/^(https?|file):/)) throw new Error("Chrome does not allow text extraction on this tab.");
+    await ensurePageHelper(tabId);
+    const result = await sendToPage(tabId, "EXTRACT_MARKDOWN");
+    if (!result?.markdown) throw new Error("No Markdown content was found in the selected source.");
+    await setBadge(tabId, "SAVE");
+    await saveMarkdown(result.markdown, suggestedMarkdownFilename(tab.title));
+  } finally {
+    await setBadge(tabId, "");
+    activeJobs.delete(tabId);
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type !== "EXPORT_PDF") return false;
-  exportPdf(message.tabId, message.mode)
+  const operation = message?.type === "EXPORT_PDF"
+    ? () => exportPdf(message.tabId, message.mode)
+    : message?.type === "DOWNLOAD_MARKDOWN"
+      ? () => downloadMarkdown(message.tabId)
+      : null;
+  if (!operation) return false;
+  operation()
     .then(() => sendResponse({ ok: true }))
     .catch((error) => {
       console.error("[GetSome] export failed", error);

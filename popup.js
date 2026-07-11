@@ -76,6 +76,16 @@ async function copyAllText() {
   setBusy(false, `Copied ${result.text.length.toLocaleString()} characters.`);
 }
 
+async function downloadMarkdown() {
+  setBusy(true, "Building Markdown…");
+  const result = await chrome.runtime.sendMessage({
+    type: "DOWNLOAD_MARKDOWN",
+    tabId: activeTabId,
+  });
+  if (!result?.ok) throw new Error(result?.error || "The Markdown file could not be created.");
+  setBusy(false, "The Save As dialog is open.");
+}
+
 async function startExport(mode) {
   setBusy(true, mode === "searchable" ? "Preparing clean PDF…" : "Capturing the page…");
   const result = await chrome.runtime.sendMessage({
@@ -107,6 +117,10 @@ document.querySelector("#clear-selection").addEventListener("click", async () =>
 
 document.querySelector("#copy-text").addEventListener("click", () => {
   copyAllText().catch(showError);
+});
+
+document.querySelector("#download-markdown").addEventListener("click", () => {
+  downloadMarkdown().catch(showError);
 });
 
 document.querySelector("#searchable-pdf").addEventListener("click", () => {
