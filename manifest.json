@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "GetSome",
+  "description": "Copy the useful text from a page or save it as a searchable or scrolling PDF.",
+  "version": "0.3.0",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/page-16.png",
+    "32": "icons/page-32.png",
+    "48": "icons/page-48.png",
+    "128": "icons/page-128.png"
+  },
+  "permissions": [
+    "activeTab",
+    "clipboardWrite",
+    "debugger",
+    "downloads",
+    "offscreen",
+    "scripting"
+  ],
+  "action": {
+    "default_title": "Copy or save this page",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/page-16.png",
+      "32": "icons/page-32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  }
+}

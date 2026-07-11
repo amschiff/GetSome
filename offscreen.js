@@ -1,0 +1,33 @@
+import { buildImagePdf } from "./pdf.js";
+
+const urls = new Set();
+
+function base64ToBytes(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.target !== "offscreen" || message.type !== "MAKE_PDF_URL") return false;
+
+  try {
+    const bytes = Array.isArray(message.segments)
+      ? buildImagePdf(message.segments)
+      : base64ToBytes(message.base64);
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    urls.add(url);
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      urls.delete(url);
+    }, 15 * 60 * 1000);
+    sendResponse({ ok: true, url });
+  } catch (error) {
+    sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) });
+  }
+  return true;
+});

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GetSome</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Capture this page</h1>
+        <p id="selection-status" class="status">Source: finding likely main content…</p>
+      </header>
+
+      <button id="pick-content" class="secondary" type="button">
+        <span>Pick content</span>
+        <small>Click the part to keep; use ↑ to choose its parent.</small>
+      </button>
+
+      <button id="copy-text" class="copy-button" type="button">
+        <span>Copy all text</span>
+        <small>Copies the picked or automatically detected main content.</small>
+      </button>
+
+      <div class="actions">
+        <button id="searchable-pdf" class="primary" type="button">
+          <span>Searchable PDF</span>
+          <small>Clean text and normal page content.</small>
+        </button>
+
+        <button id="scrolling-pdf" class="primary" type="button">
+          <span>Scrolling PDF</span>
+          <small>Pixel capture for viewers and virtual lists.</small>
+        </button>
+      </div>
+
+      <button id="clear-selection" class="clear-button" type="button" disabled>
+        <span>Clear picked content</span>
+        <small>Return to automatic likely-main detection.</small>
+      </button>
+      <p id="message" class="message" role="status" aria-live="polite"></p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

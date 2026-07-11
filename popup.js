@@ -1,0 +1,132 @@
+const buttons = [...document.querySelectorAll("button")];
+const selectionStatus = document.querySelector("#selection-status");
+const clearSelectionButton = document.querySelector("#clear-selection");
+const message = document.querySelector("#message");
+
+let activeTabId = null;
+let busy = false;
+let pageAvailable = false;
+let selectionIsManual = false;
+
+/** Injects the page helper only after the user opens the extension. */
+async function ensurePageHelper() {
+  await chrome.scripting.executeScript({
+    target: { tabId: activeTabId },
+    files: ["content.js"],
+  });
+}
+
+async function sendToPage(type, extra = {}) {
+  await ensurePageHelper();
+  const response = await chrome.tabs.sendMessage(activeTabId, { type, ...extra });
+  if (response?.__getSomeError) throw new Error(response.__getSomeError);
+  return response;
+}
+
+function applyButtonStates() {
+  for (const button of buttons) button.disabled = busy || !pageAvailable;
+  clearSelectionButton.disabled = busy || !pageAvailable || !selectionIsManual;
+}
+
+function setBusy(nextBusy, text = "") {
+  busy = nextBusy;
+  applyButtonStates();
+  message.classList.remove("error");
+  message.textContent = text;
+}
+
+function showError(error) {
+  const text = error instanceof Error ? error.message : String(error);
+  busy = false;
+  applyButtonStates();
+  message.classList.add("error");
+  message.textContent = text;
+}
+
+async function refreshStatus() {
+  const status = await sendToPage("GET_STATUS");
+  selectionIsManual = status.selected;
+  applyButtonStates();
+  selectionStatus.textContent = status.selected
+    ? `Source: picked ${status.description}`
+    : `Source: automatic likely main region (${status.description})`;
+}
+
+async function writeClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.append(textarea);
+    textarea.select();
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    if (!copied) throw new Error("Chrome did not grant clipboard access.");
+  }
+}
+
+async function copyAllText() {
+  setBusy(true, "Collecting text…");
+  const result = await sendToPage("EXTRACT_TEXT");
+  if (!result?.text) throw new Error("No visible text was found in the selected content.");
+  await writeClipboard(result.text);
+  setBusy(false, `Copied ${result.text.length.toLocaleString()} characters.`);
+}
+
+async function startExport(mode) {
+  setBusy(true, mode === "searchable" ? "Preparing clean PDF…" : "Capturing the page…");
+  const result = await chrome.runtime.sendMessage({
+    type: "EXPORT_PDF",
+    tabId: activeTabId,
+    mode,
+  });
+  if (!result?.ok) throw new Error(result?.error || "The PDF could not be created.");
+  setBusy(false, "The Save As dialog is open.");
+}
+
+document.querySelector("#pick-content").addEventListener("click", async () => {
+  try {
+    await sendToPage("START_PICKER");
+    window.close();
+  } catch (error) {
+    showError(error);
+  }
+});
+
+document.querySelector("#clear-selection").addEventListener("click", async () => {
+  try {
+    await sendToPage("CLEAR_SELECTION");
+    await refreshStatus();
+  } catch (error) {
+    showError(error);
+  }
+});
+
+document.querySelector("#copy-text").addEventListener("click", () => {
+  copyAllText().catch(showError);
+});
+
+document.querySelector("#searchable-pdf").addEventListener("click", () => {
+  startExport("searchable").catch(showError);
+});
+
+document.querySelector("#scrolling-pdf").addEventListener("click", () => {
+  startExport("scrolling").catch(showError);
+});
+
+(async () => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || !tab.url?.match(/^(https?|file):/)) {
+      throw new Error("Chrome does not allow page capture on this tab.");
+    }
+    activeTabId = tab.id;
+    pageAvailable = true;
+    await refreshStatus();
+  } catch (error) {
+    showError(error);
+  }
+})();
