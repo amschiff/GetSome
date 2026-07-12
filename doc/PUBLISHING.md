@@ -1,19 +1,48 @@
-# GetSome Publishing Guide (last edit 12Jul26)
+# GetSome Public Release Guide (last edit 12Jul26)
 
-GetSome 0.7.0 is technically suitable for public source hosting and is structured like a publishable Manifest V3 extension. Publication still requires project-owner choices and store collateral; passing local tests is not the same as Chrome Web Store approval.
+GetSome 0.7.0 is technically suitable for a public source repository. This document first covers that practical goal. Chrome Web Store publication is speculative; its separate section records issues that would matter only if store distribution is considered later.
 
-## Before making the GitHub repository public
+## Public GitHub repository
 
 - Choose and add a license. With no license, people may view the public source but do not receive general permission to copy, modify, or distribute it.
 - Add the eventual repository URL and contact route to the project metadata and privacy policy.
 - Confirm that no test downloads, private conversations, screenshots with private data, browser profiles, or local configuration files are committed.
-- Use a concise repository description such as: “Save complete AI chats as semantic HTML, Markdown, or PDF—even when the page virtualizes old turns.”
 - Add screenshots made from a non-sensitive sample conversation.
 - Tag releases using the version in `manifest.json` and `package.json`.
 
-## Chrome Web Store preparation
+### Suggested descriptive material
 
-The store submission needs more than the extension source:
+**Repository description**
+
+> Export complete AI chats from ChatGPT, Claude, Gemini, and Grok as semantic HTML, Markdown, or PDF—even when older turns are virtualized.
+
+**Short tagline**
+
+> Take the whole conversation with you.
+
+**Longer project summary**
+
+> AI chat sites often keep only the visible portion of a long conversation in the page, so ordinary copy, print, and save commands can omit most of the thread. GetSome traverses the conversation from beginning to end, removes interface clutter, and exports a portable archive. Semantic HTML preserves roles, structure, source context, and media for people and agents; Markdown provides a compact transcript; PDF remains available as a fallback. Capture runs locally in Chrome with no account, server, analytics, or telemetry.
+
+**Suggested GitHub topics**
+
+`chrome-extension`, `chat-export`, `ai-chat`, `semantic-html`, `markdown`, `pdf`, `manifest-v3`, `local-first`
+
+**Screenshot set**
+
+1. The popup on a recognizable but non-sensitive sample chat.
+2. A long source conversation containing a table and image.
+3. The same conversation as semantic HTML, showing its clean header and speaker turns.
+4. A Markdown excerpt beside the source conversation.
+5. Turn picking with a Shift-selected range.
+
+Use short captions that state the benefit rather than narrating the interface: “Captures turns that are not currently rendered,” “Preserves tables and media,” and “Exports clean speaker-attributed HTML.” Avoid real private conversations and provider logos as the main project identity.
+
+The README already supplies installation, use, privacy, limits, and development information. A public repository would also benefit from a license, a small synthetic sample export, and an initial GitHub release containing a source archive. Contribution rules and issue templates can wait until outside contributions create a real need for them.
+
+## If this extension is ever put on the Chrome Web Store
+
+Store publication is not assumed or currently required. If it is pursued, the submission would need more than the extension source:
 
 1. a [Chrome Web Store developer account](https://developer.chrome.com/docs/webstore/register), including the one-time registration fee and required 2-Step Verification;
 2. a store listing, icon, screenshots, and promotional copy;
@@ -25,7 +54,7 @@ The store submission needs more than the extension source:
 
 Store requirements and dashboard wording change. Verify the current [program policies](https://developer.chrome.com/docs/webstore/program-policies), [privacy fields](https://developer.chrome.com/docs/webstore/cws-dashboard-privacy), and [submission instructions](https://developer.chrome.com/docs/webstore/publish/) immediately before submission rather than treating this document as the authority for current policy.
 
-## Single-purpose description
+### Possible store single-purpose description
 
 A defensible store purpose is:
 
@@ -33,7 +62,7 @@ A defensible store purpose is:
 
 Keep the listing focused on reliable capture and portable archives. Do not describe GetSome as bypassing authentication, paywalls, access controls, DRM, or provider security. It does not do those things.
 
-## Permission justifications
+### Possible store permission justifications
 
 Use factual, narrow explanations:
 
@@ -44,9 +73,9 @@ Use factual, narrow explanations:
 - **offscreen:** Provides the document context needed to create temporary local Blob URLs and assemble screenshot-based PDFs.
 - **debugger:** Calls Chrome's DevTools Protocol only during PDF capture to print cleaned content or capture successive page segments, then detaches. This permission is likely to receive the most user and reviewer scrutiny because Chrome displays a debugging warning.
 
-Chrome [does not allow `debugger` to be declared as an optional permission](https://developer.chrome.com/docs/extensions/reference/api/permissions#step2). If store conversion or review becomes unacceptable, removing the two direct PDF commands and relying on printable semantic HTML would materially reduce permission sensitivity, but that is a product decision rather than a packaging change.
+Chrome [does not allow `debugger` to be declared as an optional permission](https://developer.chrome.com/docs/extensions/reference/api/permissions#step2). If store installation warnings or review ever become a concern, removing the two direct PDF commands and relying on printable semantic HTML would materially reduce permission sensitivity, but that would be a future product decision rather than a packaging change.
 
-## Privacy-policy facts
+### Possible store privacy-policy facts
 
 A public policy should accurately state all of the following:
 
@@ -61,7 +90,7 @@ A public policy should accurately state all of the following:
 
 Do not publish a policy with an invented contact or repository URL. Add those after the GitHub location is known.
 
-## Release package
+### Possible store package
 
 The runtime package consists of:
 
@@ -83,7 +112,7 @@ icons/
 
 Documentation and tests may remain in the public source repository, but they are not needed in the store ZIP. There is currently no build or packaging script, so compare the ZIP contents against this list and load the unpacked directory before submission.
 
-## Release verification
+### Possible store release verification
 
 Run:
 

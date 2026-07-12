@@ -47,7 +47,7 @@ Exports can contain private conversations and attachments. Treat the saved files
 
 ## Development
 
-GetSome is a Manifest V3 extension with no build step and no runtime dependencies. See [Technical reference](doc/TECHNICAL.md) for its architecture, capture behavior, and test coverage. See [Publishing guide](doc/PUBLISHING.md) before putting it on GitHub or submitting it to the Chrome Web Store.
+GetSome is a Manifest V3 extension with no build step and no runtime dependencies. See [Technical reference](doc/TECHNICAL.md) for its architecture, capture behavior, and test coverage. See [Public release guide](doc/PUBLISHING.md) before putting it on GitHub. That guide also records the additional issues that would apply if Chrome Web Store publication is ever considered.
 
 ```sh
 npm run check
