@@ -1,3 +1,10 @@
+/*
+ * GetSome - extension popup controller
+ *
+ * Connects stable user commands to page extraction, downloads, clipboard
+ * output, content picking, and progress or error status.
+ */
+
 const buttons = [...document.querySelectorAll("button")];
 const selectionStatus = document.querySelector("#selection-status");
 const clearSelectionButton = document.querySelector("#clear-selection");
@@ -23,6 +30,7 @@ async function sendToPage(type, extra = {}) {
   return response;
 }
 
+/** Keeps all command availability synchronized with page and job state. */
 function applyButtonStates() {
   for (const button of buttons) button.disabled = busy || !pageAvailable;
   clearSelectionButton.disabled = busy || !pageAvailable || !selectionIsManual;
@@ -78,6 +86,7 @@ async function copyAllText() {
     : `Copied ${result.text.length.toLocaleString()} characters.`);
 }
 
+/** Requests a complete Markdown transcript and hands it to the downloader. */
 async function downloadMarkdown() {
   setBusy(true, "Building Markdown…");
   const result = await chrome.runtime.sendMessage({
@@ -86,10 +95,11 @@ async function downloadMarkdown() {
   });
   if (!result?.ok) throw new Error(result?.error || "The Markdown file could not be created.");
   setBusy(false, result.partial
-    ? `The Save As dialog is open; ${result.missingCount} virtual turns did not render after retries.`
-    : "The Save As dialog is open.");
+    ? `Download started; ${result.missingCount} virtual turns did not render after retries.`
+    : "Download started.");
 }
 
+/** Requests a semantic conversation archive and hands it to the downloader. */
 async function downloadHtml() {
   setBusy(true, "Building semantic HTML…");
   const result = await chrome.runtime.sendMessage({
@@ -98,10 +108,11 @@ async function downloadHtml() {
   });
   if (!result?.ok) throw new Error(result?.error || "The HTML file could not be created.");
   setBusy(false, result.partial
-    ? `The Save As dialog is open; ${result.missingCount} virtual turns did not render after retries.`
-    : "The Save As dialog is open.");
+    ? `Download started; ${result.missingCount} virtual turns did not render after retries.`
+    : "Download started.");
 }
 
+/** Starts one PDF mode and reports partial-capture recovery to the user. */
 async function startExport(mode) {
   setBusy(true, mode === "searchable" ? "Preparing clean PDF…" : "Capturing the page…");
   const result = await chrome.runtime.sendMessage({
@@ -111,8 +122,8 @@ async function startExport(mode) {
   });
   if (!result?.ok) throw new Error(result?.error || "The PDF could not be created.");
   setBusy(false, result.partial
-    ? `A partial PDF Save As dialog is open. ${result.partialReason}`
-    : "The Save As dialog is open.");
+    ? `Partial PDF download started. ${result.partialReason}`
+    : "Download started.");
 }
 
 document.querySelector("#pick-content").addEventListener("click", async () => {

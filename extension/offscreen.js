@@ -1,3 +1,10 @@
+/*
+ * GetSome - offscreen download helper
+ *
+ * Creates Blob URLs for generated archives and assembles screenshot segments
+ * into PDFs in the document context unavailable to the service worker.
+ */
+
 import { buildImagePdf } from "./pdf.js";
 
 const urls = new Set();
@@ -11,6 +18,7 @@ function base64ToBytes(base64) {
   return bytes;
 }
 
+/** Converts background-worker payloads into temporary downloadable Blob URLs. */
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (
     message?.target !== "offscreen" ||

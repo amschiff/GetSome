@@ -55,15 +55,15 @@ Image embedding is best-effort and bounded:
 - at most 35 seconds for the embedding phase; and
 - four fetches at a time, using the current browser credentials and the source's existing URL.
 
-If an image cannot be embedded, the archive retains its description and original source reference when available. The extension does not create MHTML; the semantic archive is intentionally plain HTML with embedded data URLs where possible.
+If an image cannot be embedded, the archive retains its description and original source reference when available. Intrinsic image resolution is recorded as metadata while the provider's rendered dimensions control presentation, so tall phone screenshots remain thumbnails rather than filling the document width. The extension does not create MHTML; the semantic archive is intentionally plain HTML with embedded data URLs where possible.
 
 ### Markdown and copied text
 
-Markdown keeps speaker headings and meaningful document structure while omitting chat controls. Copied text uses simple speaker labels and cleaned plain text. Both use the same full virtualized traversal as semantic HTML.
+Markdown keeps speaker headings and meaningful document structure while omitting chat controls. Because CommonMark has no image-sizing syntax, sized images use compatible inline HTML. Copied text uses simple speaker labels and cleaned plain text. Both use the same full virtualized traversal as semantic HTML.
 
 ### PDF
 
-Searchable PDF installs a clean print shell for structured chats, asks Chrome's DevTools Protocol to print it, and retries the debugger connection up to three times. It uses screen media so the result does not inherit hostile or broken print-only styling.
+Searchable PDF installs a clean print shell for structured chats, eagerly loads and decodes cloned attachments, asks Chrome's DevTools Protocol to print it, and retries the debugger connection up to three times. It uses screen media so the result does not inherit hostile or broken print-only styling.
 
 Scrolling PDF captures successive JPEG segments and writes them into a PDF. Positioning and screenshot calls are retried; the debugger connection is restarted after screenshot failures. Capture stops after 180 seconds, 240 pages, 250,000 CSS pixels, or repeated non-progress/growth. If at least one segment exists, GetSome saves a partial PDF rather than discarding all work.
 
@@ -105,3 +105,11 @@ The automated tests cover manifest wiring, filename compaction, semantic HTML at
 Live validation is still necessary because provider DOMs are external and change without notice. Version 0.7.0 was exercised on both shared and signed-in chat pages where available. The validation conversations included long threads, tables, uploaded images, generated content, sidebars, and virtualized turns. The tested providers were ChatGPT, Claude, Gemini, and Grok.
 
 For a release candidate, repeat a full-conversation semantic HTML and Markdown export on each provider, inspect first and last turns, count roles, check tables and media, and test both PDF modes on at least one long virtualized conversation.
+
+## Development provenance
+
+GetSome was developed collaboratively with OpenAI Codex, primarily using GPT-5.6 Sol at medium through extra-high reasoning effort. Work included implementation, automated tests, and live testing against supported chat providers; one logged turn used GPT-5.6 Terra at high reasoning effort.
+
+From July 9–12, 2026, development spanned roughly 72 hours of wall-clock time across multiple sessions. At the measurement point, the logs contained 40 completed agent turns and about 2 hours 47 minutes of completed agent runtime. Interaction timestamps suggest approximately four hours of human supervision; Codex does not directly record active human attention.
+
+Recorded model usage was 126.7 million input tokens, including 121.0 million cached tokens, and 359,000 output tokens, including 145,000 reasoning tokens. These are cumulative API-processing figures: repeated calls process the growing thread, instructions, tool definitions, and tool results, so they are not the size of the visible conversation or repository.

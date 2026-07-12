@@ -52,6 +52,7 @@
     return `${tag}${id}${classes}${label ? ` - ${label}` : ""}`;
   }
 
+  /** Chooses a conservative likely-main region when the user has not picked one. */
   function automaticTarget() {
     const candidates = [...document.querySelectorAll("main, [role='main'], article")]
       .filter((element) => {
@@ -164,6 +165,7 @@
     return null;
   }
 
+  /** Normalizes one provider-specific turn into a shared role, key, and message. */
   function providerTurnDescriptor(element, fallback, provider) {
     if (provider === "chatgpt") {
       const message = element.querySelector("[data-message-author-role]");
@@ -566,7 +568,10 @@
     html[${ATTR.root}="searchable"] [${ATTR.printShell}] img {
       display: block !important;
       height: auto !important;
+      max-height: 9.2in !important;
       margin: 0.08in 0 !important;
+      break-inside: avoid !important;
+      object-fit: contain !important;
     }
   `;
 
@@ -580,6 +585,7 @@
     }
   }
 
+  /** Marks controls, navigation, and viewport-fixed ornament for reversible hiding. */
   function markClutter(target, mark) {
     const selectors = [
       "nav",
@@ -783,6 +789,7 @@
     ].join("\n");
   }
 
+  /** Recursively renders meaningful DOM structure into portable Markdown. */
   function renderMarkdownNode(node, context = {}) {
     if (node.nodeType === Node.TEXT_NODE) {
       const text = context.preformatted ? node.nodeValue || "" : (node.nodeValue || "").replace(/\s+/g, " ");
@@ -826,7 +833,14 @@
     if (tag === "IMG") {
       const alt = element.getAttribute("alt") || "Image";
       const source = element.currentSrc || element.src || "";
-      return source && !/^(data:|blob:)/i.test(source) ? `![${escapeMarkdownText(alt)}](${source})` : `[Image: ${escapeMarkdownText(alt)}]`;
+      if (!source || /^(data:|blob:)/i.test(source)) return `[Image: ${escapeMarkdownText(alt)}]`;
+      const { displayWidth, displayHeight } = imageDimensions(element);
+      const dimensions = displayWidth && displayHeight
+        ? ` width="${displayWidth}" height="${displayHeight}"`
+        : "";
+      // CommonMark has no image-size syntax. Raw HTML is widely supported and
+      // preserves the page's intentional thumbnail size for tall screenshots.
+      return `<img src="${escapeHtml(source)}" alt="${escapeHtml(alt)}"${dimensions}>`;
     }
     if (tag === "BLOCKQUOTE") {
       const quote = normalizeMarkdown(renderMarkdownChildren(element));
@@ -873,6 +887,17 @@
     const width = Math.max(rect.width, image.naturalWidth || 0, Number(image.getAttribute("width")) || 0);
     const height = Math.max(rect.height, image.naturalHeight || 0, Number(image.getAttribute("height")) || 0);
     return width >= 48 && height >= 48;
+  }
+
+  /** Records both source resolution and the size the provider chose to show. */
+  function imageDimensions(image) {
+    const rect = image.getBoundingClientRect();
+    return {
+      width: Math.max(image.naturalWidth || 0, Number(image.getAttribute("width")) || 0),
+      height: Math.max(image.naturalHeight || 0, Number(image.getAttribute("height")) || 0),
+      displayWidth: rect.width > 0 ? Math.round(rect.width) : 0,
+      displayHeight: rect.height > 0 ? Math.round(rect.height) : 0,
+    };
   }
 
   function meaningfulTurnImages(turn, message) {
@@ -962,16 +987,17 @@
   }
 
   function mediaRecord(image) {
+    const dimensions = imageDimensions(image);
     return {
       src: image.currentSrc || image.src || "",
       originalSrc: image.currentSrc || image.src || "",
       alt: image.getAttribute("alt") || image.getAttribute("aria-label") || "Uploaded image",
-      width: Math.max(image.naturalWidth || 0, Number(image.getAttribute("width")) || 0),
-      height: Math.max(image.naturalHeight || 0, Number(image.getAttribute("height")) || 0),
+      ...dimensions,
       embedded: /^(data:|blob:)/i.test(image.currentSrc || image.src || ""),
     };
   }
 
+  /** Builds one control-free print turn with eagerly loadable sized attachments. */
   function clonePrintableTurn(turn, message, role, images) {
     const section = document.createElement("section");
     const heading = document.createElement("h2");
@@ -982,7 +1008,17 @@
       const clone = image.cloneNode(false);
       const source = image.currentSrc || image.src;
       if (source) clone.src = source;
+      const { displayWidth, displayHeight } = imageDimensions(image);
       clone.removeAttribute("style");
+      clone.removeAttribute("srcset");
+      clone.removeAttribute("sizes");
+      clone.removeAttribute("loading");
+      clone.setAttribute("loading", "eager");
+      clone.setAttribute("decoding", "sync");
+      if (displayWidth && displayHeight) {
+        clone.setAttribute("width", String(displayWidth));
+        clone.setAttribute("height", String(displayHeight));
+      }
       section.append(clone);
     }
 
@@ -997,6 +1033,7 @@
     return section;
   }
 
+  /** Captures all text, structure, media, and print forms for one mounted turn. */
   function turnRecord(descriptor) {
     const { element: turn, message, role, key, order } = descriptor;
     if (!message || message.getAttribute("aria-hidden") === "true" || getComputedStyle(message).display === "none") return null;
@@ -1314,6 +1351,30 @@
     return shell;
   }
 
+  /** Prevents lazy offscreen attachments from becoming blank reserved pages. */
+  async function awaitPrintableImages(shell, maximumMilliseconds = 15_000) {
+    const images = [...shell.querySelectorAll("img")];
+    if (!images.length) return;
+    const deadline = Date.now() + maximumMilliseconds;
+    await Promise.all(images.map(async (image) => {
+      if (image.complete && image.naturalWidth > 0) return;
+      const remaining = Math.max(0, deadline - Date.now());
+      if (!remaining) return;
+      let timer;
+      await Promise.race([
+        typeof image.decode === "function"
+          ? image.decode().catch(() => {})
+          : new Promise((resolve) => {
+            image.addEventListener("load", resolve, { once: true });
+            image.addEventListener("error", resolve, { once: true });
+          }),
+        new Promise((resolve) => { timer = setTimeout(resolve, remaining); }),
+      ]).finally(() => clearTimeout(timer));
+    }));
+    await settle(100);
+  }
+
+  /** Runs one text/archive extraction while guaranteeing page-state restoration. */
   async function withCleanTextSource(mode, extract) {
     await restoreExport();
     state.pickerCleanup?.();
@@ -1335,12 +1396,15 @@
     const mark = makeMarker(context);
 
     try {
+      // Uploaded chat images commonly live inside preview buttons. Collect the
+      // structured turns before clutter hiding collapses those buttons to zero.
+      const collection = applyTurnSelection(await collectStructuredTurns(target));
       mark(document.documentElement, ATTR.root, mode);
       markClutter(target, mark);
       context.style.textContent = BASE_EXPORT_CSS;
       document.documentElement.append(context.style);
       await settle(50);
-      return await extract(target);
+      return await extract(target, collection);
     } finally {
       await restoreExport();
     }
@@ -1348,8 +1412,7 @@
 
   /** Copies all visible text from the selected or automatically detected source. */
   async function extractText() {
-    return withCleanTextSource("text", async (target) => {
-      const collection = applyTurnSelection(await collectStructuredTurns(target));
+    return withCleanTextSource("text", async (target, collection) => {
       const text = collection
         ? transcriptFromCollection(collection)
         : structuredTranscript(target) || normalizeExtractedText(target.innerText || "");
@@ -1365,8 +1428,7 @@
 
   /** Produces a portable Markdown transcript without page controls or action rows. */
   async function extractMarkdown() {
-    return withCleanTextSource("markdown", async (target) => {
-      const collection = applyTurnSelection(await collectStructuredTurns(target));
+    return withCleanTextSource("markdown", async (target, collection) => {
       const markdown = collection
         ? markdownFromCollection(collection)
         : structuredMarkdown(target) || normalizeMarkdown(renderMarkdownNode(target));
@@ -1382,8 +1444,7 @@
 
   /** Produces a semantic standalone HTML archive with best-effort embedded media. */
   async function extractHtml() {
-    return withCleanTextSource("html", async (target) => {
-      const collection = applyTurnSelection(await collectStructuredTurns(target));
+    return withCleanTextSource("html", async (target, collection) => {
       const provider = collection?.provider || chatProvider(target) || "web";
       const selected = state.selectedTurns.size > 0 || Boolean(state.selected);
       let records;
@@ -1460,7 +1521,7 @@
         context.style.textContent = BASE_EXPORT_CSS;
         document.documentElement.append(context.style);
         const shell = installPrintShell(collection, context);
-        await settle(120);
+        await awaitPrintableImages(shell);
         if (mode === "scrolling") {
           context.target = shell;
           context.scrollHost = null;
@@ -1504,6 +1565,7 @@
     return context.plan;
   }
 
+  /** Measures the selected document or internal scroller for segmented capture. */
   async function makeCapturePlan(context, mark) {
     const { target } = context;
     if (isInternalScroller(target)) {
@@ -1717,6 +1779,7 @@
     RESTORE_EXPORT: () => restoreExport(),
   };
 
+  /** Routes popup/background requests into page-side capture operations. */
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const handler = handlers[message?.type];
     if (!handler) return false;

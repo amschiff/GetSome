@@ -1,3 +1,10 @@
+/*
+ * GetSome - popup presentation
+ *
+ * Defines the compact, accessible layout and stable visual hierarchy for the
+ * extension's capture commands, explanations, progress, and error states.
+ */
+
 :root {
   color-scheme: light dark;
   font: 13px/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;

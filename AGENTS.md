@@ -28,8 +28,9 @@
 
 ## Implementation and tests
 
-- Follow the existing module style and structured source-file headers.
-- Comment contracts, recovery limits, and non-obvious browser behavior; do not narrate obvious code.
+- Every comment-capable file in `extension/` begins with a block comment that states its purpose. `manifest.json` and binary icons are exempt because their formats do not support comments.
+- Give every major function a brief JSDoc-style comment immediately before it. Major functions include exported entry points, event handlers, provider adapters, traversal/export orchestration, format renderers, and mutation or recovery helpers.
+- Comment contracts, recovery limits, and non-obvious browser behavior; do not narrate trivial helpers or obvious statements.
 - Add focused regression coverage for bug fixes when feasible, especially virtualized traversal and provider extraction failures.
 - After code or manifest changes, run:
 

@@ -1,8 +1,11 @@
 # GetSome (Version 0.7.0, last edit 12Jul26)
 
-GetSome saves the useful content of a web page—even when the site only renders the part currently on screen.
+*Take the whole conversation with you.*
 
-It is especially useful for long AI conversations. GetSome walks a conversation from beginning to end, removes controls such as copy buttons and feedback widgets, and saves the result in a form that a person or another agent can read.
+A Chrome extension you need.
+AI chat sites often keep only the visible portion of a long conversation in the page, so ordinary copy, print, and save commands can omit most of the thread. GetSome traverses the conversation from beginning to end, removes interface clutter, and exports a portable archive. Semantic HTML preserves roles, structure, source context, and media for people and agents; Markdown provides a compact transcript; PDF remains available as a fallback. Capture runs locally in Chrome with no account, server, analytics, or telemetry.
+
+GetSome can also save the useful content of ordinary web pages, using automatically detected main content or a region you pick.
 
 ## What it saves
 
@@ -12,7 +15,7 @@ It is especially useful for long AI conversations. GetSome walks a conversation 
 - **Scrolling PDF** — a pixel-based fallback for difficult viewers and virtual lists.
 - **Copied text** — the same cleaned content on the clipboard.
 
-GetSome has conversation-aware capture for ChatGPT, Claude, Gemini, and Grok. It can also use automatically detected main content or a region you pick on other pages.
+GetSome has conversation-aware capture for ChatGPT, Claude, Gemini, and Grok.
 
 ## Install from this repository
 
@@ -48,6 +51,8 @@ Exports can contain private conversations and attachments. Treat the saved files
 ## Development
 
 GetSome is a Manifest V3 extension with no build step and no runtime dependencies. See [Technical reference](doc/TECHNICAL.md) for its architecture, capture behavior, and test coverage. See [Public release guide](doc/PUBLISHING.md) before putting it on GitHub. That guide also records the additional issues that would apply if Chrome Web Store publication is ever considered.
+
+GetSome was developed collaboratively with OpenAI Codex 5.6 Sol; see the [technical reference](doc/TECHNICAL.md#development-provenance) for details.
 
 ```sh
 npm run check

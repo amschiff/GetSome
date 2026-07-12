@@ -9,9 +9,13 @@
   function recordScore(record) {
     const contentScore = [record.markdown, record.text, record.bodyHtml, record.printNode?.textContent]
       .reduce((total, value) => total + (value?.length || 0), 0);
-    return contentScore + (record.media?.length || 0) * 100;
+    const mediaScore = (record.media || []).reduce((total, item) => (
+      total + 100 + (Number(item.displayWidth) > 0 && Number(item.displayHeight) > 0 ? 50 : 0)
+    ), 0);
+    return contentScore + mediaScore;
   }
 
+  /** Merges transient DOM slices while retaining the richest form of each turn. */
   function mergeSnapshot(records, expected, snapshot) {
     for (const item of snapshot.expected || []) {
       if (!item?.key) continue;

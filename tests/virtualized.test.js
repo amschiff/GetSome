@@ -151,6 +151,39 @@ test("discovers every turn when an app exposes only the currently mounted slice"
   assert.deepEqual(result.records.map((record) => record.key), turns.map((turn) => turn.key));
 });
 
+test("replaces an offscreen image record after its rendered size becomes measurable", async () => {
+  let mounted = false;
+  const result = await collectVirtualized({
+    snapshot: async () => ({
+      expected: [{ key: "image-turn", order: 1, position: 0, required: true }],
+      records: [{
+        key: "image-turn",
+        order: 1,
+        markdown: "Uploaded image",
+        text: "Uploaded image",
+        media: [{
+          width: 1_206,
+          height: 2_622,
+          displayWidth: mounted ? 220 : 0,
+          displayHeight: mounted ? 478 : 0,
+        }],
+      }],
+    }),
+    moveTo: async () => { mounted = true; },
+    currentPosition: () => 0,
+    maxPosition: () => 0,
+    viewportSize: () => 600,
+    settle: async () => {},
+    retryCount: 3,
+    maxMilliseconds: 10_000,
+    maxSteps: 20,
+  });
+
+  assert.equal(result.complete, true);
+  assert.equal(result.records[0].media[0].displayWidth, 220);
+  assert.equal(result.records[0].media[0].displayHeight, 478);
+});
+
 test("applies single, Shift-range, and Option-additive chat selection", () => {
   const orderedKeys = ["one", "two", "three", "four", "five"];
   let selection = updateTurnSelection({

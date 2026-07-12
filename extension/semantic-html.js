@@ -66,14 +66,21 @@
       </aside>`;
   }
 
+  /** Renders sized attachments while retaining intrinsic and source metadata. */
   function renderMedia(media, turnIndex) {
     return (media || []).map((item, mediaIndex) => {
       const alt = item.alt || `Image attached to turn ${turnIndex}`;
       const source = item.src || "";
       const originalSource = item.originalSrc || source;
+      const displayWidth = Number(item.displayWidth) > 0 ? Math.round(item.displayWidth) : 0;
+      const displayHeight = Number(item.displayHeight) > 0 ? Math.round(item.displayHeight) : 0;
       const dimensions = [
-        Number(item.width) > 0 ? ` width="${Math.round(item.width)}"` : "",
-        Number(item.height) > 0 ? ` height="${Math.round(item.height)}"` : "",
+        displayWidth ? ` width="${displayWidth}"` : "",
+        displayHeight ? ` height="${displayHeight}"` : "",
+      ].join("");
+      const intrinsicDimensions = [
+        Number(item.width) > 0 ? `<meta itemprop="width" content="${Math.round(item.width)}">` : "",
+        Number(item.height) > 0 ? `<meta itemprop="height" content="${Math.round(item.height)}">` : "",
       ].join("");
       const sourceLink = originalSource && !originalSource.startsWith("data:")
         ? ` <a class="media-source" href="${escapeHtml(originalSource)}" rel="external">Original source</a>`
@@ -84,11 +91,13 @@
     ? `<img src="${escapeHtml(source)}" alt="${escapeHtml(alt)}"${dimensions} itemprop="contentUrl">`
     : `<p class="missing-media" role="note">Image unavailable: ${escapeHtml(alt)}</p>`}
             <figcaption itemprop="caption">${escapeHtml(alt)}${sourceLink}</figcaption>
+            ${intrinsicDimensions}
             <meta itemprop="position" content="${mediaIndex + 1}">
           </figure>`;
     }).join("");
   }
 
+  /** Renders one normalized record as a speaker-attributed Schema.org Message. */
   function renderTurn(record, index) {
     const position = index + 1;
     const role = record.role || "unknown";

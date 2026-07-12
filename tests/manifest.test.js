@@ -31,6 +31,41 @@ test("manifest references packaged extension files", async () => {
   ]);
 });
 
+test("comment-capable extension sources state their purpose", async () => {
+  const javascript = [
+    "background.js", "capture-core.js", "content.js", "filename.js",
+    "offscreen.js", "pdf.js", "popup.js", "semantic-html.js",
+  ];
+  const stylesheets = ["popup.css"];
+  const documents = ["offscreen.html", "popup.html"];
+  for (const path of [...javascript, ...stylesheets]) {
+    const source = await readFile(new URL(path, extensionRoot), "utf8");
+    assert.match(source, /^\/\*[\s\S]*?GetSome -[\s\S]*?\*\//, `${path} needs a purpose block`);
+  }
+  for (const path of documents) {
+    const source = await readFile(new URL(path, extensionRoot), "utf8");
+    assert.match(source, /^<!doctype html>\s*<!--[\s\S]*?GetSome -[\s\S]*?-->/, `${path} needs a purpose block`);
+  }
+});
+
+test("major extension functions have adjacent contract comments", async () => {
+  const expected = {
+    "background.js": ["ensurePageHelper", "ensureOffscreenDocument", "createSearchablePdf", "createScrollingPdf", "exportPdf", "downloadMarkdown", "downloadHtml"],
+    "capture-core.js": ["mergeSnapshot", "collectVirtualized", "updateTurnSelection"],
+    "content.js": ["automaticTarget", "chatProvider", "providerTurnDescriptor", "startPicker", "markClutter", "renderMarkdownNode", "turnRecord", "collectStructuredTurns", "withCleanTextSource", "extractMarkdown", "extractHtml", "prepareExport", "makeCapturePlan", "setCapturePosition", "restoreExport"],
+    "pdf.js": ["jpegDimensions", "buildImagePdf"],
+    "popup.js": ["ensurePageHelper", "downloadMarkdown", "downloadHtml", "startExport"],
+    "semantic-html.js": ["renderMedia", "renderTurn", "buildSemanticHtml"],
+  };
+  for (const [path, names] of Object.entries(expected)) {
+    const source = await readFile(new URL(path, extensionRoot), "utf8");
+    for (const name of names) {
+      const pattern = new RegExp(`\\/\\*\\*[\\s\\S]*?\\*\\/\\s*(?:export\\s+)?(?:async\\s+)?function ${name}\\b`);
+      assert.match(source, pattern, `${path}:${name} needs an adjacent contract comment`);
+    }
+  }
+});
+
 test("popup and offscreen helper expose the intended stable controls", async () => {
   const [popup, popupScript, offscreen] = await Promise.all([
     readFile(new URL("popup.html", extensionRoot), "utf8"),
@@ -89,4 +124,32 @@ test("semantic HTML archive download is wired end to end", async () => {
   assert.match(background, /suggestedHtmlFilename/);
   assert.match(offscreen, /MAKE_HTML_URL/);
   assert.match(offscreen, /text\/html;charset=utf-8/);
+});
+
+test("image exports retain provider sizing and wait for printable pixels", async () => {
+  const [content, semanticHtml] = await Promise.all([
+    readFile(new URL("content.js", extensionRoot), "utf8"),
+    readFile(new URL("semantic-html.js", extensionRoot), "utf8"),
+  ]);
+  assert.match(content, /displayWidth: rect\.width > 0/);
+  assert.match(content, /CommonMark has no image-size syntax/);
+  assert.match(content, /clone\.setAttribute\("loading", "eager"\)/);
+  assert.match(content, /await awaitPrintableImages\(shell\)/);
+  const cleanSource = content.slice(
+    content.indexOf("async function withCleanTextSource"),
+    content.indexOf("async function extractText"),
+  );
+  assert.ok(cleanSource.indexOf("collectStructuredTurns(target)") < cleanSource.indexOf("markClutter(target, mark)"));
+  assert.match(semanticHtml, /displayWidth \? ` width=/);
+  assert.match(semanticHtml, /itemprop="width"/);
+});
+
+test("exports download automatically without opening a Save As dialog", async () => {
+  const [background, popup] = await Promise.all([
+    readFile(new URL("background.js", extensionRoot), "utf8"),
+    readFile(new URL("popup.js", extensionRoot), "utf8"),
+  ]);
+  assert.match(background, /saveAs:\s*false/);
+  assert.doesNotMatch(background, /saveAs:\s*true/);
+  assert.doesNotMatch(popup, /Save As dialog/);
 });

@@ -27,6 +27,8 @@ test("builds an attributed semantic conversation without duplicating turn text",
           alt: "Uploaded property list",
           width: 800,
           height: 600,
+          displayWidth: 320,
+          displayHeight: 240,
           embedded: true,
         }],
       },
@@ -51,7 +53,9 @@ test("builds an attributed semantic conversation without duplicating turn text",
   assert.doesNotMatch(html, /Apts for SuiShared by Allan/);
   assert.match(html, /<table><tr><th>Property<\/th>/);
   assert.match(html, /itemprop="messageAttachment"/);
-  assert.match(html, /src="data:image\/png;base64,AA=="/);
+  assert.match(html, /src="data:image\/png;base64,AA==" alt="Uploaded property list" width="320" height="240"/);
+  assert.match(html, /<meta itemprop="width" content="800">/);
+  assert.match(html, /<meta itemprop="height" content="600">/);
   assert.match(html, /rel="source external"/);
   assert.equal(html.match(/Raffles is the best fit\./g)?.length, 1);
 });

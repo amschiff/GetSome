@@ -2,7 +2,7 @@
  * GetSome - extension service worker
  *
  * Coordinates reversible page preparation, Chrome DevTools Protocol capture,
- * screenshot capture, and a user-controlled Save As download.
+ * screenshot capture, and automatic collision-safe downloads.
  */
 
 import {
@@ -46,6 +46,7 @@ async function withTimeout(promise, milliseconds, message) {
   }
 }
 
+/** Injects the provider-independent capture stack after a user gesture. */
 async function ensurePageHelper(tabId) {
   await chrome.scripting.executeScript({
     target: { tabId },
@@ -59,6 +60,7 @@ async function sendToPage(tabId, type, extra = {}) {
   return response;
 }
 
+/** Creates the reusable offscreen document needed for Blob and PDF work. */
 async function ensureOffscreenDocument() {
   const url = chrome.runtime.getURL("offscreen.html");
   const contexts = await chrome.runtime.getContexts({
@@ -70,7 +72,7 @@ async function ensureOffscreenDocument() {
     creatingOffscreenDocument = chrome.offscreen.createDocument({
       url: "offscreen.html",
       reasons: ["BLOBS"],
-      justification: "Create a temporary Blob URL for a generated file's Save As dialog.",
+      justification: "Create a temporary Blob URL for a generated export.",
     }).finally(() => {
       creatingOffscreenDocument = null;
     });
@@ -78,6 +80,7 @@ async function ensureOffscreenDocument() {
   await creatingOffscreenDocument;
 }
 
+/** Downloads an offscreen-generated Blob URL without requiring another user action. */
 async function downloadFromOffscreen(message, filename, timeoutMessage) {
   await ensureOffscreenDocument();
   const response = await withTimeout(
@@ -97,7 +100,7 @@ async function downloadFromOffscreen(message, filename, timeoutMessage) {
   await chrome.downloads.download({
     url: response.url,
     filename: availableFilename,
-    saveAs: true,
+    saveAs: false,
     conflictAction: "uniquify",
   });
 }
@@ -148,6 +151,7 @@ async function restartDebugger(tabId, state) {
   state.target = await attachDebugger(tabId);
 }
 
+/** Prints the prepared semantic shell while recovering a stalled CDP session. */
 async function createSearchablePdf(tabId, debuggerState) {
   let lastError;
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -194,6 +198,7 @@ function normalizedClip(clip) {
   };
 }
 
+/** Captures successive page slices with bounded scrolling and debugger recovery. */
 async function createScrollingPdf(tabId, debuggerState, initialPlan) {
   const segments = [];
   let coverage = 0;
@@ -355,6 +360,7 @@ async function exportPdf(tabId, mode) {
   }
 }
 
+/** Traverses, extracts, and downloads one complete Markdown transcript. */
 async function downloadMarkdown(tabId) {
   if (activeJobs.has(tabId)) throw new Error("A capture is already running for this tab.");
   activeJobs.add(tabId);
@@ -375,6 +381,7 @@ async function downloadMarkdown(tabId) {
   }
 }
 
+/** Traverses, extracts, and downloads one standalone semantic HTML archive. */
 async function downloadHtml(tabId) {
   if (activeJobs.has(tabId)) throw new Error("A capture is already running for this tab.");
   activeJobs.add(tabId);
@@ -395,6 +402,7 @@ async function downloadHtml(tabId) {
   }
 }
 
+/** Routes popup requests into one guarded background job per active tab. */
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const operation = message?.type === "EXPORT_PDF"
     ? () => exportPdf(message.tabId, message.mode)
