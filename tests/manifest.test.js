@@ -23,20 +23,24 @@ test("manifest references packaged extension files", async () => {
     access(new URL(manifest.action.default_popup, root)),
     access(new URL("content.js", root)),
     access(new URL("capture-core.js", root)),
+    access(new URL("filename.js", root)),
     access(new URL("offscreen.html", root)),
     ...Object.values(manifest.icons).map((path) => access(new URL(path, root))),
   ]);
 });
 
 test("popup and offscreen helper expose the intended stable controls", async () => {
-  const [popup, offscreen] = await Promise.all([
+  const [popup, popupScript, offscreen] = await Promise.all([
     readFile(new URL("popup.html", root), "utf8"),
+    readFile(new URL("popup.js", root), "utf8"),
     readFile(new URL("offscreen.html", root), "utf8"),
   ]);
   assert.match(popup, /id="clear-selection"[^>]*disabled/);
   assert.match(popup, />Clear picked content</);
   assert.match(popup, /id="copy-text"/);
   assert.match(popup, />Copy all text</);
+  assert.match(popupScript, /`Source: \$\{status\.description\}`/);
+  assert.doesNotMatch(popupScript, /Source: picked \$\{status\.description\}/);
   assert.match(offscreen, /<script type="module" src="offscreen\.js"><\/script>/);
 });
 
@@ -49,9 +53,15 @@ test("Markdown transcript download is wired end to end", async () => {
   ]);
   assert.match(popup, /id="download-markdown"/);
   assert.match(popup, />Download Markdown</);
+  assert.match(popup, /Shift range; Option add\/remove/);
   assert.match(content, /data-message-author-role/);
   assert.match(content, /EXTRACT_MARKDOWN/);
   assert.match(content, /collectStructuredTurns/);
+  assert.match(content, /provider === "claude"/);
+  assert.match(content, /provider === "gemini"/);
+  assert.match(content, /provider === "grok"/);
+  assert.match(content, /This is a copy of a chat between Claude and/);
+  assert.match(content, /editorial\.map\(\(line\) => `> /);
   assert.match(background, /capture-core\.js/);
   assert.doesNotMatch(await readFile(new URL("popup.css", root), "utf8"), /button:disabled\s*\{[^}]*cursor:\s*wait/s);
   assert.match(background, /DOWNLOAD_MARKDOWN/);

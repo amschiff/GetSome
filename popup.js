@@ -48,7 +48,7 @@ async function refreshStatus() {
   selectionIsManual = status.selected;
   applyButtonStates();
   selectionStatus.textContent = status.selected
-    ? `Source: picked ${status.description}`
+    ? `Source: ${status.description}`
     : `Source: automatic likely main region (${status.description})`;
 }
 

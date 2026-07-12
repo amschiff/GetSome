@@ -18,10 +18,15 @@
     expanded: "data-getsome-expanded",
     internal: "data-getsome-internal",
     printShell: "data-getsome-print-shell",
+    pickable: "data-getsome-pickable",
+    picked: "data-getsome-picked",
+    speaker: "data-getsome-speaker",
   };
 
   const state = {
     selected: null,
+    selectedTurns: new Set(),
+    selectionAnchor: null,
     pickerCleanup: null,
     exportContext: null,
   };
@@ -72,18 +77,165 @@
 
   function status() {
     const target = currentTarget();
+    if (state.selectedTurns.size) {
+      return {
+        selected: true,
+        description: `${state.selectedTurns.size} picked chat ${state.selectedTurns.size === 1 ? "turn" : "turns"}`,
+      };
+    }
     return {
       selected: Boolean(state.selected),
       description: describeElement(target),
     };
   }
 
-  /** Starts an element picker with parent/child keyboard navigation. */
+  function removeTurnSelectionMarks() {
+    for (const turn of document.querySelectorAll(`[${ATTR.pickable}],[${ATTR.picked}],[${ATTR.speaker}]`)) {
+      turn.removeAttribute(ATTR.pickable);
+      turn.removeAttribute(ATTR.picked);
+      turn.removeAttribute(ATTR.speaker);
+    }
+  }
+
+  function clearPickedContent() {
+    state.pickerCleanup?.();
+    state.selected = null;
+    state.selectedTurns.clear();
+    state.selectionAnchor = null;
+    removeTurnSelectionMarks();
+    return status();
+  }
+
+  function stableTextHash(text) {
+    let hash = 2166136261;
+    for (const character of text) {
+      hash ^= character.codePointAt(0);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(36);
+  }
+
+  function claudeHeading(element) {
+    const heading = [...element.children].find((child) => child.tagName === "H2");
+    const text = heading?.textContent?.trim() || "";
+    return /^(You said:|Claude responded:)/.test(text) ? heading : null;
+  }
+
+  /** Detects known chat markup without tying traversal to one vendor. */
+  function chatProvider(target) {
+    if (target.querySelectorAll("[data-testid^='conversation-turn-']").length >= 2) return "chatgpt";
+    if ([...target.querySelectorAll("h2")].filter((heading) => /^(You said:|Claude responded:)/.test(heading.textContent?.trim() || "")).length >= 2) {
+      return "claude";
+    }
+    if (
+      target.querySelector("[data-testid='user-message']")
+      && target.querySelector("[data-testid='assistant-message']")
+    ) return "grok";
+    if (target.querySelectorAll("user-query-content, model-response").length >= 2) return "gemini";
+    return "";
+  }
+
+  function providerTurnElements(target, provider = chatProvider(target)) {
+    if (provider === "chatgpt") return [...target.querySelectorAll("[data-testid^='conversation-turn-']")];
+    if (provider === "grok") return [...target.querySelectorAll("[data-testid='user-message'], [data-testid='assistant-message']")];
+    if (provider === "gemini") return [...target.querySelectorAll("user-query-content, model-response")];
+    if (provider === "claude") {
+      return [...new Set(
+        [...target.querySelectorAll("h2")]
+          .filter((heading) => /^(You said:|Claude responded:)/.test(heading.textContent?.trim() || ""))
+          .map((heading) => heading.parentElement)
+          .filter(Boolean),
+      )];
+    }
+    return [];
+  }
+
+  function providerTurnElementAt(target, provider, start) {
+    if (!(start instanceof Element)) return null;
+    if (provider === "chatgpt") return start.closest("[data-testid^='conversation-turn-']");
+    if (provider === "gemini") return start.closest("user-query-content, model-response");
+    if (provider === "grok") return start.closest("[data-testid='user-message'], [data-testid='assistant-message']");
+    if (provider === "claude") {
+      for (let element = start; element && element !== target; element = element.parentElement) {
+        if (claudeHeading(element)) return element;
+      }
+      return claudeHeading(target) ? target : null;
+    }
+    return null;
+  }
+
+  function providerTurnDescriptor(element, fallback, provider) {
+    if (provider === "chatgpt") {
+      const message = element.querySelector("[data-message-author-role]");
+      return {
+        element,
+        message,
+        role: message?.getAttribute("data-message-author-role") || element.getAttribute("data-turn") || "",
+        key: turnKey(element, fallback),
+        order: turnOrder(element, fallback),
+      };
+    }
+    if (provider === "claude") {
+      const heading = claudeHeading(element);
+      if (!heading) return null;
+      const headingText = heading.textContent?.trim() || "";
+      const role = headingText.startsWith("You said:") ? "user" : "assistant";
+      return {
+        element,
+        message: element,
+        role,
+        key: `claude-${fallback}-${role}-${stableTextHash(headingText)}`,
+        order: fallback,
+      };
+    }
+    if (provider === "gemini") {
+      const role = element.tagName === "USER-QUERY-CONTENT" ? "user" : "assistant";
+      const pair = element.closest(".conversation-container[id]");
+      const pairKey = pair?.id || `pair-${Math.floor(fallback / 2)}`;
+      return {
+        element,
+        message: role === "user"
+          ? element.querySelector(".query-text") || element
+          : element.querySelector(".response-content") || element,
+        role,
+        key: `gemini-${pairKey}-${role}`,
+        order: fallback,
+      };
+    }
+    if (provider === "grok") {
+      const role = element.getAttribute("data-testid") === "user-message" ? "user" : "assistant";
+      const response = element.closest("[id^='response-']");
+      return {
+        element,
+        message: element,
+        role,
+        key: response?.id || `grok-${role}-${stableTextHash(element.innerText || "")}`,
+        order: fallback,
+      };
+    }
+    return null;
+  }
+
+  function chatTurnDescriptors(target, provider = chatProvider(target)) {
+    return providerTurnElements(target, provider)
+      .map((element, index) => providerTurnDescriptor(element, index, provider))
+      .filter(Boolean);
+  }
+
+  /** Starts either a chat-turn multi-picker or the generic element picker. */
   function startPicker() {
     state.pickerCleanup?.();
 
+    const pickerTarget = automaticTarget();
+    const provider = chatProvider(pickerTarget);
+    const chatTurns = chatTurnDescriptors(pickerTarget, provider);
+    const chatMode = chatTurns.length >= 2 && Boolean(globalThis.GetSomeCaptureCore?.updateTurnSelection);
+    const previousSelection = new Set(state.selectedTurns);
+    const previousAnchor = state.selectionAnchor;
+
     const outline = document.createElement("div");
     const hint = document.createElement("div");
+    const pickerStyle = document.createElement("style");
     const commonStyle = [
       "position:fixed",
       "z-index:2147483647",
@@ -108,13 +260,62 @@
       "color:#fff",
       "box-shadow:0 3px 14px rgba(0,0,0,.3)",
     ].join(";");
-    hint.textContent = "Click content to keep - Up chooses its parent - Down reverses - Esc cancels";
-    document.documentElement.append(outline, hint);
+    hint.textContent = chatMode
+      ? "Click a turn · Shift-click a range · Option-click to add/remove · Enter finishes · Esc cancels"
+      : "Click content to keep · Up chooses its parent · Down reverses · Esc cancels";
+    pickerStyle.textContent = `
+      [${ATTR.pickable}] { cursor: pointer !important; }
+      [${ATTR.picked}] {
+        position: relative !important;
+        outline: 3px solid #1473e6 !important;
+        outline-offset: -3px !important;
+        background-color: rgba(20, 115, 230, .08) !important;
+      }
+      [${ATTR.picked}]::before {
+        content: attr(${ATTR.speaker});
+        position: absolute !important;
+        z-index: 2147483646 !important;
+        top: 4px !important;
+        left: 4px !important;
+        padding: 2px 6px !important;
+        border-radius: 999px !important;
+        background: #1473e6 !important;
+        color: #fff !important;
+        font: 600 11px/1.3 system-ui, sans-serif !important;
+        pointer-events: none !important;
+      }
+    `;
+    document.documentElement.append(pickerStyle, outline, hint);
 
-    let candidate = document.body;
+    let candidate = chatMode
+      ? chatTurns.find((turn) => turn.element.getBoundingClientRect().height > 0)?.element || chatTurns[0].element
+      : document.body;
     const childHistory = [];
 
+    function orderedTurnKeys() {
+      return chatTurnDescriptors(pickerTarget, provider)
+        .sort((left, right) => left.order - right.order)
+        .map((turn) => turn.key);
+    }
+
+    function refreshTurnMarks() {
+      if (!chatMode) return;
+      const turns = chatTurnDescriptors(pickerTarget, provider);
+      turns.forEach((turn) => {
+        const { element, key, role } = turn;
+        element.setAttribute(ATTR.pickable, "");
+        if (state.selectedTurns.has(key)) {
+          element.setAttribute(ATTR.picked, "");
+          element.setAttribute(ATTR.speaker, speakerLabel(role));
+        } else {
+          element.removeAttribute(ATTR.picked);
+          element.removeAttribute(ATTR.speaker);
+        }
+      });
+    }
+
     function paint() {
+      if (!candidate?.isConnected) return;
       const rect = candidate.getBoundingClientRect();
       const left = Math.max(0, rect.left);
       const top = Math.max(0, rect.top);
@@ -122,21 +323,39 @@
       outline.style.top = `${top}px`;
       outline.style.width = `${Math.max(0, Math.min(innerWidth, rect.right) - left)}px`;
       outline.style.height = `${Math.max(0, Math.min(innerHeight, rect.bottom) - top)}px`;
-      outline.title = describeElement(candidate);
+      const descriptor = chatMode
+        ? chatTurnDescriptors(pickerTarget, provider).find((turn) => turn.element === candidate)
+        : null;
+      outline.title = descriptor ? speakerLabel(descriptor.role) : describeElement(candidate);
     }
 
     function onMove(event) {
       if (!(event.target instanceof Element) || event.target === outline || event.target === hint) return;
-      candidate = event.target;
+      if (chatMode) {
+        const turn = providerTurnElementAt(pickerTarget, provider, event.target);
+        if (!turn || !pickerTarget.contains(turn)) return;
+        candidate = turn;
+      } else {
+        candidate = event.target;
+      }
       childHistory.length = 0;
       paint();
     }
 
-    function cleanup() {
+    const observer = chatMode ? new MutationObserver(() => refreshTurnMarks()) : null;
+
+    function cleanup(cancel = false) {
       removeEventListener("mousemove", onMove, true);
       removeEventListener("click", onClick, true);
       removeEventListener("keydown", onKeyDown, true);
       removeEventListener("scroll", paint, true);
+      observer?.disconnect();
+      if (cancel) {
+        state.selectedTurns = new Set(previousSelection);
+        state.selectionAnchor = previousAnchor;
+      }
+      removeTurnSelectionMarks();
+      pickerStyle.remove();
       outline.remove();
       hint.remove();
       state.pickerCleanup = null;
@@ -145,17 +364,46 @@
     function onClick(event) {
       event.preventDefault();
       event.stopImmediatePropagation();
+      if (chatMode) {
+        const turn = providerTurnElementAt(pickerTarget, provider, event.target);
+        if (!turn || !pickerTarget.contains(turn)) return;
+        const clickedKey = chatTurnDescriptors(pickerTarget, provider).find((item) => item.element === turn)?.key;
+        if (!clickedKey) return;
+        const next = globalThis.GetSomeCaptureCore.updateTurnSelection({
+          orderedKeys: orderedTurnKeys(),
+          selectedKeys: state.selectedTurns,
+          anchorKey: state.selectionAnchor,
+          clickedKey,
+          shiftKey: event.shiftKey,
+          additiveKey: event.altKey,
+        });
+        state.selected = null;
+        state.selectedTurns = next.selectedKeys;
+        state.selectionAnchor = next.anchorKey;
+        candidate = turn;
+        refreshTurnMarks();
+        hint.textContent = `${state.selectedTurns.size} ${state.selectedTurns.size === 1 ? "turn" : "turns"} picked · Shift range · Option add/remove · Enter finishes`;
+        paint();
+        return;
+      }
       state.selected = candidate;
+      state.selectedTurns.clear();
+      state.selectionAnchor = null;
       cleanup();
     }
 
     function onKeyDown(event) {
       if (event.key === "Escape") {
         event.preventDefault();
+        cleanup(true);
+        return;
+      }
+      if (chatMode && event.key === "Enter") {
+        event.preventDefault();
         cleanup();
         return;
       }
-      if (event.key === "ArrowUp" && candidate.parentElement && candidate !== document.body) {
+      if (!chatMode && event.key === "ArrowUp" && candidate.parentElement && candidate !== document.body) {
         event.preventDefault();
         childHistory.push(candidate);
         candidate = candidate.parentElement;
@@ -171,9 +419,13 @@
     addEventListener("click", onClick, true);
     addEventListener("keydown", onKeyDown, true);
     addEventListener("scroll", paint, true);
+    if (chatMode) {
+      observer.observe(pickerTarget, { childList: true, subtree: true });
+      refreshTurnMarks();
+    }
     state.pickerCleanup = cleanup;
     paint();
-    return { started: true };
+    return { started: true, mode: chatMode ? "chat-turns" : "element" };
   }
 
   function documentHeight() {
@@ -631,6 +883,15 @@
     ));
   }
 
+  function cleanMessageClone(message) {
+    const clone = message.cloneNode(true);
+    for (const element of clone.querySelectorAll([
+      ".sr-only", ".cdk-visually-hidden", ".model-response-label-announcer",
+      ".thinking-container", "[data-find-omitted]", "[role='toolbar']",
+    ].join(","))) element.remove();
+    return clone;
+  }
+
   function clonePrintableTurn(turn, message, role, images) {
     const section = document.createElement("section");
     const heading = document.createElement("h2");
@@ -645,10 +906,10 @@
       section.append(clone);
     }
 
-    const content = message.cloneNode(true);
+    const content = cleanMessageClone(message);
     for (const element of content.querySelectorAll([
       "button", "input", "select", "textarea", "script", "style", "noscript",
-      "template", "svg", "canvas", "audio", "video", "form",
+      "template", "svg", "canvas", "audio", "video", "form", "img",
       "[role='button']", "[role='toolbar']", "[role='navigation']",
       "[role='dialog']", "[aria-hidden='true']",
     ].join(","))) element.remove();
@@ -656,23 +917,25 @@
     return section;
   }
 
-  function turnRecord(turn, fallback) {
-    const message = turn.querySelector("[data-message-author-role]");
+  function turnRecord(descriptor) {
+    const { element: turn, message, role, key, order } = descriptor;
     if (!message || message.getAttribute("aria-hidden") === "true" || getComputedStyle(message).display === "none") return null;
-    const role = message.getAttribute("data-message-author-role") || "";
-    const images = meaningfulTurnImages(turn, message);
-    const textImages = [...new Set([
-      ...images,
+    const images = [...new Set([
+      ...meaningfulTurnImages(turn, message),
       ...message.querySelectorAll("img"),
     ])].filter((image) => (
-      !image.closest("button,[role='button'],[aria-hidden='true']")
+      !image.closest("[aria-hidden='true']")
       && hasMeaningfulImageSize(image)
     ));
+    // Uploaded images are commonly nested in clickable preview buttons. Capture
+    // the image first, then render a clone without controls to avoid duplication.
+    const markdownSource = cleanMessageClone(message);
+    for (const image of markdownSource.querySelectorAll("img")) image.remove();
     const imageMarkdown = images.map((image) => normalizeMarkdown(renderMarkdownNode(image))).filter(Boolean);
-    const imageText = textImages.map((image) => `[Image: ${image.getAttribute("alt") || "uploaded image"}]`);
+    const imageText = images.map((image) => `[Image: ${image.getAttribute("alt") || "uploaded image"}]`);
     const markdown = normalizeMarkdown([
       ...imageMarkdown,
-      normalizeMarkdown(renderMarkdownChildren(message)),
+      normalizeMarkdown(renderMarkdownChildren(markdownSource)),
     ].filter(Boolean).join("\n\n"));
     const text = normalizeExtractedText([
       ...imageText,
@@ -680,8 +943,8 @@
     ].filter(Boolean).join("\n\n"));
     if (!markdown && !text && !images.length) return null;
     return {
-      key: turnKey(turn, fallback),
-      order: turnOrder(turn, fallback),
+      key,
+      order,
       role,
       markdown,
       text,
@@ -710,20 +973,61 @@
     return Math.max(0, rect.top - hostRect.top + host.scrollTop);
   }
 
+  function firstLeafText(root, predicate) {
+    return [...root.querySelectorAll("*")]
+      .find((element) => !element.children.length && predicate((element.textContent || "").trim()))
+      ?.textContent?.trim() || "";
+  }
+
+  function chatPreambleMarkdown(provider) {
+    if (provider === "claude") {
+      const header = document.querySelector("header");
+      const title = normalizeExtractedText(
+        header?.querySelector(".truncate.text-text-300")?.innerText
+        || firstLeafText(header || document, (text) => text && !/^Shared by\s+/.test(text)),
+      );
+      const sharedBy = firstLeafText(header || document, (text) => /^Shared by\s+/.test(text));
+      const notice = [...document.querySelectorAll("p")]
+        .map((paragraph) => normalizeExtractedText(paragraph.innerText || ""))
+        .find((text) => text.startsWith("This is a copy of a chat between Claude and ")) || "";
+      const editorial = [sharedBy, notice].filter(Boolean);
+      return normalizeMarkdown([
+        title ? `# ${escapeMarkdownText(title)}` : "",
+        editorial.length
+          ? editorial.map((line) => `> ${escapeMarkdownText(line)}`).join("\n>\n")
+          : "",
+      ].filter(Boolean).join("\n\n"));
+    }
+    if (provider === "gemini") return "# Conversation with Gemini";
+    if (provider === "grok") {
+      const title = document.title.replace(/\s*\|\s*Shared Grok Conversation\s*$/i, "").trim();
+      return normalizeMarkdown([
+        title ? `# ${escapeMarkdownText(title)}` : "",
+        "> Shared Grok conversation",
+      ].filter(Boolean).join("\n\n"));
+    }
+    return "";
+  }
+
   /** Collects every transiently mounted conversation turn from top to bottom. */
   async function collectStructuredTurns(target) {
-    const initialTurns = [...target.querySelectorAll("[data-testid^='conversation-turn-']")];
+    const provider = chatProvider(target);
+    const initialTurns = chatTurnDescriptors(target, provider);
     if (initialTurns.length < 2 || !globalThis.GetSomeCaptureCore?.collectVirtualized) return null;
     const host = isInternalScroller(target) ? target : findScrollableAncestor(target);
 
     const snapshot = () => {
-      const turns = [...target.querySelectorAll("[data-testid^='conversation-turn-']")];
+      const turns = chatTurnDescriptors(target, provider);
       return {
-        expected: turns.map((turn, index) => ({
-          key: turnKey(turn, index),
-          order: turnOrder(turn, index),
-          position: turnScrollPosition(turn, host),
-        })),
+        expected: turns.map((turn) => {
+          const mounted = Boolean(turn.message) || turn.element.getBoundingClientRect().height > 1;
+          return {
+            key: turn.key,
+            order: turn.order,
+            position: turnScrollPosition(turn.element, host),
+            required: mounted,
+          };
+        }),
         records: turns.map(turnRecord).filter(Boolean),
       };
     };
@@ -732,11 +1036,11 @@
       const maximum = scrollMaximum(host);
       const position = Math.min(Math.max(0, requested), maximum);
       if (attempt > 0) {
-        const turns = [...target.querySelectorAll("[data-testid^='conversation-turn-']")];
+        const turns = chatTurnDescriptors(target, provider);
         const nearest = turns.sort((left, right) => (
-          Math.abs(turnScrollPosition(left, host) - position) - Math.abs(turnScrollPosition(right, host) - position)
+          Math.abs(turnScrollPosition(left.element, host) - position) - Math.abs(turnScrollPosition(right.element, host) - position)
         ))[0];
-        nearest?.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+        nearest?.element.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
       }
       if (host) {
         host.scrollTop = position;
@@ -746,7 +1050,7 @@
       }
     };
 
-    return globalThis.GetSomeCaptureCore.collectVirtualized({
+    const collection = await globalThis.GetSomeCaptureCore.collectVirtualized({
       snapshot,
       moveTo,
       currentPosition: () => scrollPosition(host),
@@ -757,6 +1061,28 @@
       maxMilliseconds: 180_000,
       maxSteps: 1_200,
     });
+    return {
+      ...collection,
+      provider,
+      preambleMarkdown: chatPreambleMarkdown(provider),
+    };
+  }
+
+  function applyTurnSelection(collection) {
+    if (!collection || !state.selectedTurns.size) return collection;
+    const inactiveKeys = new Set(collection.inactiveKeys || []);
+    const selectedKeys = [...state.selectedTurns].filter((key) => !inactiveKeys.has(key));
+    const records = collection.records.filter((record) => selectedKeys.includes(record.key));
+    const capturedKeys = new Set(records.map((record) => record.key));
+    const missingKeys = selectedKeys.filter((key) => !capturedKeys.has(key));
+    return {
+      ...collection,
+      records,
+      preambleMarkdown: "",
+      expectedCount: selectedKeys.length,
+      missingKeys,
+      complete: !collection.stoppedReason && missingKeys.length === 0,
+    };
   }
 
   function transcriptFromCollection(collection) {
@@ -767,10 +1093,11 @@
   }
 
   function markdownFromCollection(collection) {
-    return collection.records
+    const transcript = collection.records
       .filter((record) => record.markdown)
       .map((record) => `## ${speakerLabel(record.role)}\n\n${record.markdown}`)
       .join("\n\n");
+    return [collection.preambleMarkdown, transcript].filter(Boolean).join("\n\n");
   }
 
   function installPrintShell(collection, context) {
@@ -819,7 +1146,7 @@
   /** Copies all visible text from the selected or automatically detected source. */
   async function extractText() {
     return withCleanTextSource("text", async (target) => {
-      const collection = await collectStructuredTurns(target);
+      const collection = applyTurnSelection(await collectStructuredTurns(target));
       const text = collection
         ? transcriptFromCollection(collection)
         : structuredTranscript(target) || normalizeExtractedText(target.innerText || "");
@@ -836,7 +1163,7 @@
   /** Produces a portable Markdown transcript without page controls or action rows. */
   async function extractMarkdown() {
     return withCleanTextSource("markdown", async (target) => {
-      const collection = await collectStructuredTurns(target);
+      const collection = applyTurnSelection(await collectStructuredTurns(target));
       const markdown = collection
         ? markdownFromCollection(collection)
         : structuredMarkdown(target) || normalizeMarkdown(renderMarkdownNode(target));
@@ -872,20 +1199,31 @@
     state.exportContext = context;
     const mark = makeMarker(context);
 
-    if (mode === "searchable") {
-      const collection = await collectStructuredTurns(target);
-      if (collection?.records.length >= 2) {
-        mark(document.documentElement, ATTR.root, mode);
+    if (mode === "searchable" || state.selectedTurns.size) {
+      const collection = applyTurnSelection(await collectStructuredTurns(target));
+      if (collection?.records.length) {
+        mark(document.documentElement, ATTR.root, "searchable");
         context.style.textContent = BASE_EXPORT_CSS;
         document.documentElement.append(context.style);
-        installPrintShell(collection, context);
+        const shell = installPrintShell(collection, context);
         await settle(120);
+        if (mode === "scrolling") {
+          context.target = shell;
+          context.scrollHost = null;
+          context.plan = await makeCapturePlan(context, mark);
+          return {
+            ...context.plan,
+            partial: !collection.complete,
+            missingCount: collection.missingKeys.length,
+          };
+        }
         return {
           description: describeElement(target),
           partial: !collection.complete,
           missingCount: collection.missingKeys.length,
         };
       }
+      if (state.selectedTurns.size) throw new Error("The picked chat turns did not render after recovery attempts.");
     }
 
     mark(document.documentElement, ATTR.root, mode);
@@ -1115,8 +1453,7 @@
     GET_STATUS: () => status(),
     START_PICKER: () => startPicker(),
     CLEAR_SELECTION: () => {
-      state.selected = null;
-      return status();
+      return clearPickedContent();
     },
     EXTRACT_TEXT: () => extractText(),
     EXTRACT_MARKDOWN: () => extractMarkdown(),

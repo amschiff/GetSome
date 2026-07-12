@@ -5,6 +5,8 @@
  * screenshot capture, and a user-controlled Save As download.
  */
 
+import { nextAvailableFilename, suggestedMarkdownFilename, suggestedPdfFilename } from "./filename.js";
+
 const activeJobs = new Set();
 let creatingOffscreenDocument = null;
 
@@ -49,23 +51,6 @@ async function sendToPage(tabId, type, extra = {}) {
   return response;
 }
 
-function cleanFilenameTitle(title) {
-  return (title || "page")
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 110) || "page";
-}
-
-function suggestedPdfFilename(title, mode, partial = false) {
-  const kind = mode === "scrolling" ? "scrolling" : "clean";
-  return `${cleanFilenameTitle(title)} - ${kind}${partial ? " - partial" : ""}.pdf`;
-}
-
-function suggestedMarkdownFilename(title) {
-  return `${cleanFilenameTitle(title)}.md`;
-}
-
 async function ensureOffscreenDocument() {
   const url = chrome.runtime.getURL("offscreen.html");
   const contexts = await chrome.runtime.getContexts({
@@ -96,9 +81,14 @@ async function downloadFromOffscreen(message, filename, timeoutMessage) {
     timeoutMessage,
   );
   if (!response?.ok) throw new Error(response?.error || "Could not prepare the download.");
+  const history = await chrome.downloads.search({ limit: 500, orderBy: ["-startTime"] }).catch(() => []);
+  const availableFilename = nextAvailableFilename(
+    filename,
+    history.filter((item) => item.exists !== false).map((item) => item.filename),
+  );
   await chrome.downloads.download({
     url: response.url,
-    filename,
+    filename: availableFilename,
     saveAs: true,
     conflictAction: "uniquify",
   });
@@ -324,6 +314,9 @@ async function exportPdf(tabId, mode) {
       if (mode === "searchable" && plan.partial) {
         pdf.partial = true;
         pdf.partialReason = `${plan.missingCount} virtual conversation turns did not render after recovery attempts.`;
+      } else if (mode === "scrolling" && plan.partial && !pdf.partial) {
+        pdf.partial = true;
+        pdf.partialReason = `${plan.missingCount} picked conversation turns did not render after recovery attempts.`;
       }
     } finally {
       if (debuggerState.target) {

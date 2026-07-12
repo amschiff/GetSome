@@ -15,7 +15,12 @@
     for (const item of snapshot.expected || []) {
       if (!item?.key) continue;
       const previous = expected.get(item.key);
-      if (!previous || Number.isFinite(item.position)) expected.set(item.key, { ...previous, ...item });
+      if (!previous || Number.isFinite(item.position)) {
+        const merged = { ...previous, ...item };
+        if (previous?.required || item.required) merged.required = true;
+        else if (item.required === false) merged.required = false;
+        expected.set(item.key, merged);
+      }
     }
     for (const record of snapshot.records || []) {
       if (!record?.key) continue;
@@ -99,7 +104,7 @@
     // Placeholder positions remain present on ChatGPT even while their message
     // contents are unmounted. Re-anchor every missed turn individually.
     for (let pass = 0; pass < 2 && !stoppedReason; pass += 1) {
-      const missing = [...expected.values()].filter((item) => !records.has(item.key));
+      const missing = [...expected.values()].filter((item) => item.required !== false && !records.has(item.key));
       if (!missing.length) break;
       const before = records.size;
       for (const item of missing) {
@@ -108,16 +113,46 @@
       if (records.size === before) break;
     }
 
-    const missingKeys = [...expected.keys()].filter((key) => !records.has(key));
+    const requiredItems = [...expected.values()].filter((item) => item.required !== false);
+    const inactiveKeys = [...expected.values()]
+      .filter((item) => item.required === false && !records.has(item.key))
+      .map((item) => item.key);
+    const missingKeys = requiredItems.filter((item) => !records.has(item.key)).map((item) => item.key);
     return {
       records: sortedRecords(records, expected),
-      expectedCount: expected.size,
+      expectedCount: requiredItems.length,
       complete: !stoppedReason && missingKeys.length === 0,
       missingKeys,
+      inactiveKeys,
       stoppedReason,
       steps,
     };
   }
 
-  globalThis.GetSomeCaptureCore = { collectVirtualized };
+  /** Applies familiar single, range, and additive selection semantics. */
+  function updateTurnSelection({ orderedKeys, selectedKeys, anchorKey, clickedKey, shiftKey, additiveKey }) {
+    const selected = new Set(selectedKeys || []);
+    const clickedIndex = orderedKeys.indexOf(clickedKey);
+    if (clickedIndex < 0) return { selectedKeys: selected, anchorKey };
+
+    if (shiftKey && anchorKey && orderedKeys.includes(anchorKey)) {
+      const anchorIndex = orderedKeys.indexOf(anchorKey);
+      const start = Math.min(anchorIndex, clickedIndex);
+      const end = Math.max(anchorIndex, clickedIndex);
+      if (!additiveKey) selected.clear();
+      for (const key of orderedKeys.slice(start, end + 1)) selected.add(key);
+      return { selectedKeys: selected, anchorKey };
+    }
+
+    if (additiveKey) {
+      if (selected.has(clickedKey)) selected.delete(clickedKey);
+      else selected.add(clickedKey);
+    } else {
+      selected.clear();
+      selected.add(clickedKey);
+    }
+    return { selectedKeys: selected, anchorKey: clickedKey };
+  }
+
+  globalThis.GetSomeCaptureCore = { collectVirtualized, updateTurnSelection };
 })();

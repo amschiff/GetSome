@@ -1,10 +1,10 @@
 {
   "name": "getsome-chrome-extension",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check background.js && node --check capture-core.js && node --check content.js && node --check offscreen.js && node --check pdf.js && node --check popup.js",
+    "check": "node --check background.js && node --check capture-core.js && node --check content.js && node --check filename.js && node --check offscreen.js && node --check pdf.js && node --check popup.js",
     "test": "node --test tests/*.test.js"
   }
 }
