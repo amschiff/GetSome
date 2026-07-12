@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   compactTitle,
   nextAvailableFilename,
+  suggestedHtmlFilename,
   suggestedMarkdownFilename,
   suggestedPdfFilename,
 } from "../filename.js";
@@ -20,6 +21,7 @@ test("compacts long conversation titles into readable handles", () => {
 
 test("uses compact names for every export format", () => {
   assert.equal(suggestedMarkdownFilename("Highest Elo and Newbie Rating"), "ELO Rating.md");
+  assert.equal(suggestedHtmlFilename("Highest Elo and Newbie Rating"), "ELO Rating.html");
   assert.equal(suggestedPdfFilename("Beijing apartments for Sui", "searchable"), "Apts for Sui clean.pdf");
   assert.equal(
     suggestedPdfFilename("Beijing apartments for Sui", "scrolling", true),

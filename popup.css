@@ -90,10 +90,14 @@ button small {
   gap: 8px;
 }
 
-.markdown-button {
+.html-button {
   min-height: 62px;
   border-color: color-mix(in srgb, Highlight 62%, Canvas);
   background: color-mix(in srgb, Highlight 15%, Canvas);
+}
+
+.markdown-button {
+  min-height: 54px;
 }
 
 .copy-button {

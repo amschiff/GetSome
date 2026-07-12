@@ -99,6 +99,10 @@ export function suggestedMarkdownFilename(title) {
   return `${compactTitle(title)}.md`;
 }
 
+export function suggestedHtmlFilename(title) {
+  return `${compactTitle(title)}.html`;
+}
+
 function escapedRegex(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

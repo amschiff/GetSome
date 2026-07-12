@@ -5,7 +5,12 @@
  * screenshot capture, and a user-controlled Save As download.
  */
 
-import { nextAvailableFilename, suggestedMarkdownFilename, suggestedPdfFilename } from "./filename.js";
+import {
+  nextAvailableFilename,
+  suggestedHtmlFilename,
+  suggestedMarkdownFilename,
+  suggestedPdfFilename,
+} from "./filename.js";
 
 const activeJobs = new Set();
 let creatingOffscreenDocument = null;
@@ -42,7 +47,10 @@ async function withTimeout(promise, milliseconds, message) {
 }
 
 async function ensurePageHelper(tabId) {
-  await chrome.scripting.executeScript({ target: { tabId }, files: ["capture-core.js", "content.js"] });
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["capture-core.js", "semantic-html.js", "content.js"],
+  });
 }
 
 async function sendToPage(tabId, type, extra = {}) {
@@ -108,6 +116,14 @@ async function saveMarkdown(markdown, filename) {
     { type: "MAKE_MARKDOWN_URL", markdown },
     filename,
     "Markdown download preparation did not finish within two minutes.",
+  );
+}
+
+async function saveHtml(html, filename) {
+  await downloadFromOffscreen(
+    { type: "MAKE_HTML_URL", html },
+    filename,
+    "HTML download preparation did not finish within two minutes.",
   );
 }
 
@@ -359,9 +375,31 @@ async function downloadMarkdown(tabId) {
   }
 }
 
+async function downloadHtml(tabId) {
+  if (activeJobs.has(tabId)) throw new Error("A capture is already running for this tab.");
+  activeJobs.add(tabId);
+  await setBadge(tabId, "HTML");
+
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab.url?.match(/^(https?|file):/)) throw new Error("Chrome does not allow HTML extraction on this tab.");
+    await ensurePageHelper(tabId);
+    const result = await sendToPage(tabId, "EXTRACT_HTML");
+    if (!result?.html) throw new Error("No semantic HTML content was found in the selected source.");
+    await setBadge(tabId, "SAVE");
+    await saveHtml(result.html, suggestedHtmlFilename(result.title || tab.title));
+    return { partial: Boolean(result.partial), missingCount: result.missingCount || 0 };
+  } finally {
+    await setBadge(tabId, "");
+    activeJobs.delete(tabId);
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   const operation = message?.type === "EXPORT_PDF"
     ? () => exportPdf(message.tabId, message.mode)
+    : message?.type === "DOWNLOAD_HTML"
+      ? () => downloadHtml(message.tabId)
     : message?.type === "DOWNLOAD_MARKDOWN"
       ? () => downloadMarkdown(message.tabId)
       : null;

@@ -24,6 +24,7 @@ test("manifest references packaged extension files", async () => {
     access(new URL("content.js", root)),
     access(new URL("capture-core.js", root)),
     access(new URL("filename.js", root)),
+    access(new URL("semantic-html.js", root)),
     access(new URL("offscreen.html", root)),
     ...Object.values(manifest.icons).map((path) => access(new URL(path, root))),
   ]);
@@ -67,4 +68,24 @@ test("Markdown transcript download is wired end to end", async () => {
   assert.match(background, /DOWNLOAD_MARKDOWN/);
   assert.match(offscreen, /MAKE_MARKDOWN_URL/);
   assert.match(offscreen, /text\/markdown;charset=utf-8/);
+});
+
+test("semantic HTML archive download is wired end to end", async () => {
+  const [popup, popupScript, content, background, offscreen] = await Promise.all([
+    readFile(new URL("popup.html", root), "utf8"),
+    readFile(new URL("popup.js", root), "utf8"),
+    readFile(new URL("content.js", root), "utf8"),
+    readFile(new URL("background.js", root), "utf8"),
+    readFile(new URL("offscreen.js", root), "utf8"),
+  ]);
+  assert.match(popup, /id="download-html"/);
+  assert.match(popup, />Download semantic HTML</);
+  assert.match(popupScript, /DOWNLOAD_HTML/);
+  assert.match(popupScript, /semantic-html\.js/);
+  assert.match(content, /EXTRACT_HTML/);
+  assert.match(content, /withEmbeddedMedia/);
+  assert.match(background, /DOWNLOAD_HTML/);
+  assert.match(background, /suggestedHtmlFilename/);
+  assert.match(offscreen, /MAKE_HTML_URL/);
+  assert.match(offscreen, /text\/html;charset=utf-8/);
 });

@@ -7,8 +7,9 @@
 
 (() => {
   function recordScore(record) {
-    return [record.markdown, record.text, record.printNode?.textContent]
+    const contentScore = [record.markdown, record.text, record.bodyHtml, record.printNode?.textContent]
       .reduce((total, value) => total + (value?.length || 0), 0);
+    return contentScore + (record.media?.length || 0) * 100;
   }
 
   function mergeSnapshot(records, expected, snapshot) {

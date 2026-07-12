@@ -14,7 +14,7 @@ function base64ToBytes(base64) {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (
     message?.target !== "offscreen" ||
-    !["MAKE_PDF_URL", "MAKE_MARKDOWN_URL"].includes(message.type)
+    !["MAKE_PDF_URL", "MAKE_MARKDOWN_URL", "MAKE_HTML_URL"].includes(message.type)
   ) {
     return false;
   }
@@ -22,11 +22,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   try {
     const blob = message.type === "MAKE_MARKDOWN_URL"
       ? new Blob([message.markdown], { type: "text/markdown;charset=utf-8" })
-      : new Blob([
+      : message.type === "MAKE_HTML_URL"
+        ? new Blob([message.html], { type: "text/html;charset=utf-8" })
+        : new Blob([
         Array.isArray(message.segments)
           ? buildImagePdf(message.segments)
           : base64ToBytes(message.base64),
-      ], { type: "application/pdf" });
+        ], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
     urls.add(url);
     setTimeout(() => {

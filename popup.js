@@ -12,7 +12,7 @@ let selectionIsManual = false;
 async function ensurePageHelper() {
   await chrome.scripting.executeScript({
     target: { tabId: activeTabId },
-    files: ["capture-core.js", "content.js"],
+    files: ["capture-core.js", "semantic-html.js", "content.js"],
   });
 }
 
@@ -90,6 +90,18 @@ async function downloadMarkdown() {
     : "The Save As dialog is open.");
 }
 
+async function downloadHtml() {
+  setBusy(true, "Building semantic HTML…");
+  const result = await chrome.runtime.sendMessage({
+    type: "DOWNLOAD_HTML",
+    tabId: activeTabId,
+  });
+  if (!result?.ok) throw new Error(result?.error || "The HTML file could not be created.");
+  setBusy(false, result.partial
+    ? `The Save As dialog is open; ${result.missingCount} virtual turns did not render after retries.`
+    : "The Save As dialog is open.");
+}
+
 async function startExport(mode) {
   setBusy(true, mode === "searchable" ? "Preparing clean PDF…" : "Capturing the page…");
   const result = await chrome.runtime.sendMessage({
@@ -127,6 +139,10 @@ document.querySelector("#copy-text").addEventListener("click", () => {
 
 document.querySelector("#download-markdown").addEventListener("click", () => {
   downloadMarkdown().catch(showError);
+});
+
+document.querySelector("#download-html").addEventListener("click", () => {
+  downloadHtml().catch(showError);
 });
 
 document.querySelector("#searchable-pdf").addEventListener("click", () => {

@@ -892,6 +892,86 @@
     return clone;
   }
 
+  const SEMANTIC_HTML_TAGS = new Set([
+    "a", "abbr", "address", "article", "aside", "b", "blockquote", "br", "cite", "code",
+    "dd", "del", "details", "dfn", "div", "dl", "dt", "em", "figcaption", "figure", "h1",
+    "h2", "h3", "h4", "h5", "h6", "hr", "i", "ins", "kbd", "li", "main", "mark", "ol",
+    "p", "pre", "q", "s", "samp", "section", "small", "span", "strong", "sub", "summary",
+    "sup", "table", "tbody", "td", "tfoot", "th", "thead", "time", "tr", "u", "ul", "var",
+  ]);
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function semanticHtmlAttributes(element, tag) {
+    const attributes = [];
+    const add = (name, value) => {
+      if (value !== null && value !== undefined && value !== "") attributes.push(`${name}="${escapeHtml(value)}"`);
+    };
+    if (element.lang) add("lang", element.lang);
+    if (element.dir === "ltr" || element.dir === "rtl" || element.dir === "auto") add("dir", element.dir);
+    if (tag === "a") {
+      const href = element.href || element.getAttribute("href") || "";
+      if (href && !/^(javascript:|data:)/i.test(href)) add("href", href);
+      add("title", element.getAttribute("title"));
+      if (href) add("rel", "external");
+    } else if (tag === "ol") {
+      add("start", element.getAttribute("start"));
+      if (element.hasAttribute("reversed")) attributes.push("reversed");
+      add("type", element.getAttribute("type"));
+    } else if (tag === "li") {
+      add("value", element.getAttribute("value"));
+    } else if (tag === "td" || tag === "th") {
+      add("colspan", element.getAttribute("colspan"));
+      add("rowspan", element.getAttribute("rowspan"));
+      add("scope", element.getAttribute("scope"));
+    } else if (tag === "time") {
+      add("datetime", element.getAttribute("datetime"));
+    } else if (tag === "details" && element.hasAttribute("open")) {
+      attributes.push("open");
+    } else if (tag === "blockquote" || tag === "q") {
+      add("cite", element.getAttribute("cite"));
+    } else if (tag === "abbr") {
+      add("title", element.getAttribute("title"));
+    } else if (tag === "code") {
+      const language = [...element.classList].find((name) => /^language-[\w+-]+$/.test(name));
+      if (language) add("class", language);
+    }
+    return attributes.length ? ` ${attributes.join(" ")}` : "";
+  }
+
+  function semanticHtmlNode(node) {
+    if (node.nodeType === Node.TEXT_NODE) return escapeHtml(node.nodeValue || "");
+    if (node.nodeType !== Node.ELEMENT_NODE) return "";
+    const element = node;
+    if (shouldSkipMarkdownElement(element) || element.tagName === "IMG") return "";
+    const originalTag = element.tagName.toLowerCase();
+    const tag = SEMANTIC_HTML_TAGS.has(originalTag) ? originalTag : "div";
+    if (tag === "br" || tag === "hr") return `<${tag}>`;
+    return `<${tag}${semanticHtmlAttributes(element, tag)}>${semanticHtmlChildren(element)}</${tag}>`;
+  }
+
+  function semanticHtmlChildren(element) {
+    return [...element.childNodes].map(semanticHtmlNode).join("");
+  }
+
+  function mediaRecord(image) {
+    return {
+      src: image.currentSrc || image.src || "",
+      originalSrc: image.currentSrc || image.src || "",
+      alt: image.getAttribute("alt") || image.getAttribute("aria-label") || "Uploaded image",
+      width: Math.max(image.naturalWidth || 0, Number(image.getAttribute("width")) || 0),
+      height: Math.max(image.naturalHeight || 0, Number(image.getAttribute("height")) || 0),
+      embedded: /^(data:|blob:)/i.test(image.currentSrc || image.src || ""),
+    };
+  }
+
   function clonePrintableTurn(turn, message, role, images) {
     const section = document.createElement("section");
     const heading = document.createElement("h2");
@@ -941,6 +1021,9 @@
       ...imageText,
       message.innerText || "",
     ].filter(Boolean).join("\n\n"));
+    const semanticSource = cleanMessageClone(message);
+    for (const image of semanticSource.querySelectorAll("img")) image.remove();
+    const bodyHtml = semanticHtmlChildren(semanticSource);
     if (!markdown && !text && !images.length) return null;
     return {
       key,
@@ -948,6 +1031,8 @@
       role,
       markdown,
       text,
+      bodyHtml,
+      media: images.map(mediaRecord),
       printNode: clonePrintableTurn(turn, message, role, images),
     };
   }
@@ -979,7 +1064,7 @@
       ?.textContent?.trim() || "";
   }
 
-  function chatPreambleMarkdown(provider) {
+  function chatDocumentDetails(provider) {
     if (provider === "claude") {
       const header = document.querySelector("header");
       const title = normalizeExtractedText(
@@ -990,23 +1075,81 @@
       const notice = [...document.querySelectorAll("p")]
         .map((paragraph) => normalizeExtractedText(paragraph.innerText || ""))
         .find((text) => text.startsWith("This is a copy of a chat between Claude and ")) || "";
-      const editorial = [sharedBy, notice].filter(Boolean);
-      return normalizeMarkdown([
-        title ? `# ${escapeMarkdownText(title)}` : "",
-        editorial.length
-          ? editorial.map((line) => `> ${escapeMarkdownText(line)}`).join("\n>\n")
-          : "",
-      ].filter(Boolean).join("\n\n"));
+      return { title: title || "Claude conversation", editorial: [sharedBy, notice].filter(Boolean) };
     }
-    if (provider === "gemini") return "# Conversation with Gemini";
+    if (provider === "gemini") {
+      const title = document.title.replace(/\s*[-–—|]\s*Google Gemini\s*$/i, "").trim();
+      return { title: title || "Conversation with Gemini", editorial: [] };
+    }
     if (provider === "grok") {
       const title = document.title.replace(/\s*\|\s*Shared Grok Conversation\s*$/i, "").trim();
-      return normalizeMarkdown([
-        title ? `# ${escapeMarkdownText(title)}` : "",
-        "> Shared Grok conversation",
-      ].filter(Boolean).join("\n\n"));
+      return { title: title || "Grok conversation", editorial: ["Shared Grok conversation"] };
     }
-    return "";
+    const title = document.title.replace(/\s*[-–—|]\s*ChatGPT\s*$/i, "").trim();
+    return { title: title || "Conversation", editorial: [] };
+  }
+
+  function clippedSourceMetadata(text, maximum = 600) {
+    const normalized = normalizeExtractedText(text);
+    if (normalized.length <= maximum) return normalized;
+    const clipped = normalized.slice(0, maximum + 1).replace(/\s+\S*$/, "").trim();
+    return `${clipped || normalized.slice(0, maximum)} … [clipped]`;
+  }
+
+  /** Captures nearby non-turn context without trying to impose a provider schema. */
+  function captureSourceMetadata(target, provider, details) {
+    const candidates = [];
+    const firstTurn = chatTurnDescriptors(target, provider)[0]?.element;
+    for (let node = firstTurn; node?.parentElement && node !== target; node = node.parentElement) {
+      const siblings = [];
+      for (let sibling = node.previousElementSibling; sibling; sibling = sibling.previousElementSibling) siblings.unshift(sibling);
+      candidates.unshift(...siblings);
+      if (candidates.length > 20) break;
+    }
+
+    const raw = [...(details.editorial || [])];
+    for (const element of candidates) {
+      if (
+        element.matches("nav,aside,[role='navigation'],[role='complementary'],[aria-hidden='true']")
+        || element.querySelector("nav,[role='navigation']")
+        || element.querySelectorAll("button,[role='button']").length > 6
+        || providerTurnElements(element, provider).length
+      ) continue;
+      const clone = cleanMessageClone(element);
+      for (const clutter of clone.querySelectorAll([
+        "button", "input", "select", "textarea", "script", "style", "svg", "form",
+        "nav", "aside", "[role='button']", "[role='toolbar']", "[role='navigation']",
+        "[aria-hidden='true']",
+      ].join(","))) clutter.remove();
+      const text = normalizeExtractedText(clone.textContent || "");
+      if (text) raw.push(text);
+    }
+
+    const output = [];
+    const seen = new Set();
+    let remaining = 1_800;
+    for (const value of raw) {
+      const text = clippedSourceMetadata(value, Math.min(600, remaining));
+      const key = text.toLocaleLowerCase();
+      if (!text || text === details.title || seen.has(key)) continue;
+      output.push(text);
+      seen.add(key);
+      remaining -= text.length;
+      if (output.length >= 8 || remaining < 40) break;
+    }
+    return output;
+  }
+
+  function chatPreambleMarkdown(provider) {
+    if (provider === "chatgpt" || !provider) return "";
+    const details = chatDocumentDetails(provider);
+    if (!details.title && !details.editorial.length) return "";
+    return normalizeMarkdown([
+      details.title ? `# ${escapeMarkdownText(details.title)}` : "",
+      details.editorial.length
+        ? details.editorial.map((line) => `> ${escapeMarkdownText(line)}`).join("\n>\n")
+        : "",
+    ].filter(Boolean).join("\n\n"));
   }
 
   /** Collects every transiently mounted conversation turn from top to bottom. */
@@ -1018,17 +1161,18 @@
 
     const snapshot = () => {
       const turns = chatTurnDescriptors(target, provider);
+      const records = turns.map(turnRecord).filter(Boolean);
+      const recordedKeys = new Set(records.map((record) => record.key));
       return {
-        expected: turns.map((turn) => {
-          const mounted = Boolean(turn.message) || turn.element.getBoundingClientRect().height > 1;
-          return {
-            key: turn.key,
-            order: turn.order,
-            position: turnScrollPosition(turn.element, host),
-            required: mounted,
-          };
-        }),
-        records: turns.map(turnRecord).filter(Boolean),
+        expected: turns.map((turn) => ({
+          key: turn.key,
+          order: turn.order,
+          position: turnScrollPosition(turn.element, host),
+          // ChatGPT retains empty DOM shells for inactive answer branches. A
+          // turn becomes required only after it yields meaningful content.
+          required: recordedKeys.has(turn.key),
+        })),
+        records,
       };
     };
 
@@ -1098,6 +1242,65 @@
       .map((record) => `## ${speakerLabel(record.role)}\n\n${record.markdown}`)
       .join("\n\n");
     return [collection.preambleMarkdown, transcript].filter(Boolean).join("\n\n");
+  }
+
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.addEventListener("load", () => resolve(String(reader.result || "")), { once: true });
+      reader.addEventListener("error", () => reject(reader.error || new Error("Could not read image data.")), { once: true });
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  async function fetchEmbeddedMedia(source, deadline) {
+    if (!source) return null;
+    if (source.startsWith("data:")) return { src: source, bytes: 0 };
+    const remaining = deadline - Date.now();
+    if (remaining < 250) return null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.min(10_000, remaining));
+    try {
+      const response = await fetch(source, {
+        cache: "force-cache",
+        credentials: "include",
+        signal: controller.signal,
+      });
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      if (blob.size > 12 * 1024 * 1024 || (blob.type && !blob.type.startsWith("image/"))) return null;
+      return { src: await blobToDataUrl(blob), bytes: blob.size };
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** Best-effort media embedding is bounded so a hostile page cannot stall export. */
+  async function withEmbeddedMedia(records) {
+    const sources = [...new Set(records.flatMap((record) => record.media || []).map((item) => item.src).filter(Boolean))].slice(0, 24);
+    const embedded = new Map();
+    const deadline = Date.now() + 35_000;
+    let byteBudget = 32 * 1024 * 1024;
+    for (let index = 0; index < sources.length && Date.now() < deadline; index += 4) {
+      const batch = sources.slice(index, index + 4);
+      const results = await Promise.all(batch.map((source) => fetchEmbeddedMedia(source, deadline)));
+      batch.forEach((source, resultIndex) => {
+        const result = results[resultIndex];
+        if (!result || result.bytes > byteBudget) return;
+        byteBudget -= result.bytes;
+        embedded.set(source, result.src);
+      });
+    }
+    return records.map((record) => ({
+      ...record,
+      media: (record.media || []).map((item) => ({
+        ...item,
+        src: embedded.get(item.src) || item.src,
+        embedded: embedded.has(item.src) || item.src.startsWith("data:"),
+      })),
+    }));
   }
 
   function installPrintShell(collection, context) {
@@ -1170,6 +1373,57 @@
       if (!markdown) throw new Error("No visible text was found in the selected content.");
       return {
         markdown,
+        description: describeElement(target),
+        partial: Boolean(collection && !collection.complete),
+        missingCount: collection?.missingKeys.length || 0,
+      };
+    });
+  }
+
+  /** Produces a semantic standalone HTML archive with best-effort embedded media. */
+  async function extractHtml() {
+    return withCleanTextSource("html", async (target) => {
+      const collection = applyTurnSelection(await collectStructuredTurns(target));
+      const provider = collection?.provider || chatProvider(target) || "web";
+      const selected = state.selectedTurns.size > 0 || Boolean(state.selected);
+      let records;
+      if (collection) {
+        records = collection.records;
+      } else {
+        const source = cleanMessageClone(target);
+        for (const image of source.querySelectorAll("img")) image.remove();
+        const images = [...target.querySelectorAll("img")].filter((image) => (
+          !image.closest("button,[role='button'],[aria-hidden='true']")
+          && hasMeaningfulImageSize(image)
+        ));
+        records = [{
+          key: "document",
+          order: 0,
+          role: "document",
+          text: normalizeExtractedText(target.innerText || ""),
+          bodyHtml: semanticHtmlChildren(source),
+          media: images.map(mediaRecord),
+        }];
+      }
+      records = await withEmbeddedMedia(records);
+      const details = chatDocumentDetails(provider);
+      const builder = globalThis.GetSomeSemanticHtml?.buildSemanticHtml;
+      if (!builder) throw new Error("The semantic HTML builder was not loaded.");
+      const html = builder({
+        title: details.title,
+        provider,
+        sourceUrl: location.href,
+        exportedAt: new Date().toISOString(),
+        records,
+        sourceMetadata: captureSourceMetadata(target, provider, details),
+        complete: collection ? collection.complete : true,
+        missingCount: collection?.missingKeys.length || 0,
+        selected,
+      });
+      if (!html) throw new Error("No HTML content was found in the selected source.");
+      return {
+        html,
+        title: details.title,
         description: describeElement(target),
         partial: Boolean(collection && !collection.complete),
         missingCount: collection?.missingKeys.length || 0,
@@ -1457,6 +1711,7 @@
     },
     EXTRACT_TEXT: () => extractText(),
     EXTRACT_MARKDOWN: () => extractMarkdown(),
+    EXTRACT_HTML: () => extractHtml(),
     PREPARE_EXPORT: (message) => prepareExport(message.mode),
     SET_CAPTURE_POSITION: (message) => setCapturePosition(message.coverage),
     RESTORE_EXPORT: () => restoreExport(),

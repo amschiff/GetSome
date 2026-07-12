@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "GetSome",
-  "description": "Download useful page text as Markdown, copy it, or save a PDF fallback.",
-  "version": "0.6.0",
+  "description": "Download semantic HTML or Markdown, copy useful page text, or save a PDF fallback.",
+  "version": "0.7.0",
   "minimum_chrome_version": "116",
   "icons": {
     "16": "icons/page-16.png",
