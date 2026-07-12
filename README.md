@@ -19,7 +19,7 @@ GetSome has conversation-aware capture for ChatGPT, Claude, Gemini, and Grok. It
 1. Download or clone the repository.
 2. Open `chrome://extensions` in Chrome.
 3. Turn on **Developer mode**.
-4. Click **Load unpacked** and choose this repository's folder.
+4. Click **Load unpacked** and choose the repository's `extension` folder.
 
 After updating the source, return to `chrome://extensions` and click GetSome's reload button. You do not need to remove and reinstall it.
 

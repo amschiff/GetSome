@@ -8,7 +8,7 @@ GetSome 0.7.0 is technically suitable for a public source repository. This docum
 - Add the eventual repository URL and contact route to the project metadata and privacy policy.
 - Confirm that no test downloads, private conversations, screenshots with private data, browser profiles, or local configuration files are committed.
 - Add screenshots made from a non-sensitive sample conversation.
-- Tag releases using the version in `manifest.json` and `package.json`.
+- Tag releases using the matching versions in `extension/manifest.json` and `package.json`.
 
 ### Suggested descriptive material
 
@@ -48,7 +48,7 @@ Store publication is not assumed or currently required. If it is pursued, the su
 2. a store listing, icon, screenshots, and promotional copy;
 3. a public privacy-policy URL;
 4. accurate data-use disclosures and permission justifications in the developer dashboard;
-5. a ZIP with `manifest.json` at its root;
+5. a ZIP of `extension/` with `manifest.json` at its root;
 6. a version bump for every uploaded revision; and
 7. a final test of the exact ZIP loaded unpacked into a clean Chrome profile.
 
@@ -92,7 +92,7 @@ Do not publish a policy with an invented contact or repository URL. Add those af
 
 ### Possible store package
 
-The runtime package consists of:
+The repository's `extension/` directory is the runtime package. A possible store ZIP would contain its contents at the archive root:
 
 ```text
 manifest.json
@@ -110,7 +110,7 @@ semantic-html.js
 icons/
 ```
 
-Documentation and tests may remain in the public source repository, but they are not needed in the store ZIP. There is currently no build or packaging script, so compare the ZIP contents against this list and load the unpacked directory before submission.
+Repository documentation, tests, and package metadata remain outside `extension/` and would not belong in a store ZIP. There is currently no build or packaging script, so compare the ZIP contents against this list and load `extension/` unpacked before any possible submission.
 
 ### Possible store release verification
 

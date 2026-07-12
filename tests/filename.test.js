@@ -7,7 +7,7 @@ import {
   suggestedHtmlFilename,
   suggestedMarkdownFilename,
   suggestedPdfFilename,
-} from "../filename.js";
+} from "../extension/filename.js";
 
 test("compacts long conversation titles into readable handles", () => {
   assert.equal(compactTitle("Beijing apartments for Sui (2)"), "Apts for Sui 2");

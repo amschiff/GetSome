@@ -4,18 +4,18 @@ This document describes the implementation and maintenance boundaries of GetSome
 
 ## Runtime structure
 
-GetSome is a Chrome Manifest V3 extension with no bundler and no runtime dependencies.
+GetSome is a Chrome Manifest V3 extension with no bundler and no runtime dependencies. The directly loadable extension is isolated in `extension/`; repository-level `tests/`, `doc/`, and `package.json` are development material rather than part of the Chrome package.
 
 | File | Responsibility |
 | --- | --- |
-| `popup.html`, `popup.css`, `popup.js` | Stable commands, selection status, content-script injection, clipboard output, and progress/error reporting. |
-| `content.js` | Main-content detection, provider adapters, turn and media extraction, selection UI, reversible page cleanup, virtual-page movement, and export geometry. |
-| `capture-core.js` | Provider-independent traversal and merging of transient virtualized slices, including retry and partial-result decisions. |
-| `semantic-html.js` | Standalone semantic document generation. |
-| `background.js` | Job coordination, downloads, Chrome debugger lifecycle, searchable PDF printing, scrolling screenshots, retry, and cleanup. |
-| `offscreen.html`, `offscreen.js` | Blob URL creation for downloads and pixel-PDF assembly outside the service worker. |
-| `pdf.js` | Minimal PDF writer for JPEG screenshot segments. |
-| `filename.js` | Short title-derived filenames and collision numbering based on recent downloads. |
+| `extension/{popup.html,popup.css,popup.js}` | Stable commands, selection status, content-script injection, clipboard output, and progress/error reporting. |
+| `extension/content.js` | Main-content detection, provider adapters, turn and media extraction, selection UI, reversible page cleanup, virtual-page movement, and export geometry. |
+| `extension/capture-core.js` | Provider-independent traversal and merging of transient virtualized slices, including retry and partial-result decisions. |
+| `extension/semantic-html.js` | Standalone semantic document generation. |
+| `extension/background.js` | Job coordination, downloads, Chrome debugger lifecycle, searchable PDF printing, scrolling screenshots, retry, and cleanup. |
+| `extension/{offscreen.html,offscreen.js}` | Blob URL creation for downloads and pixel-PDF assembly outside the service worker. |
+| `extension/pdf.js` | Minimal PDF writer for JPEG screenshot segments. |
+| `extension/filename.js` | Short title-derived filenames and collision numbering based on recent downloads. |
 
 The popup injects the capture modules only after the user invokes the extension. A capture records and restores its page attributes, styles, expanded elements, and scroll positions. The background worker also detaches the Chrome debugger in `finally` cleanup paths.
 

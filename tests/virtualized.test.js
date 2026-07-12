@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-await import("../capture-core.js");
+await import("../extension/capture-core.js");
 
 const { collectVirtualized, updateTurnSelection } = globalThis.GetSomeCaptureCore;
 

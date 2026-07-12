@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check background.js && node --check capture-core.js && node --check content.js && node --check filename.js && node --check offscreen.js && node --check pdf.js && node --check popup.js && node --check semantic-html.js",
+    "check": "node --check extension/background.js && node --check extension/capture-core.js && node --check extension/content.js && node --check extension/filename.js && node --check extension/offscreen.js && node --check extension/pdf.js && node --check extension/popup.js && node --check extension/semantic-html.js",
     "test": "node --test tests/*.test.js"
   }
 }

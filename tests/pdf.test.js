@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { base64ToBytes, buildImagePdf, bytesToBase64, jpegDimensions } from "../pdf.js";
+import { base64ToBytes, buildImagePdf, bytesToBase64, jpegDimensions } from "../extension/pdf.js";
 
 function tinyJpeg(width, height) {
   return new Uint8Array([

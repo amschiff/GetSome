@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
-const root = new URL("../", import.meta.url);
+const repositoryRoot = new URL("../", import.meta.url);
+const extensionRoot = new URL("../extension/", import.meta.url);
 
 test("manifest references packaged extension files", async () => {
-  const manifest = JSON.parse(await readFile(new URL("manifest.json", root), "utf8"));
-  const packageJson = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
+  const manifest = JSON.parse(await readFile(new URL("manifest.json", extensionRoot), "utf8"));
+  const packageJson = JSON.parse(await readFile(new URL("package.json", repositoryRoot), "utf8"));
   assert.equal(manifest.manifest_version, 3);
   assert.equal(manifest.version, packageJson.version);
   assert.equal(manifest.background.type, "module");
@@ -19,22 +20,22 @@ test("manifest references packaged extension files", async () => {
   });
 
   await Promise.all([
-    access(new URL(manifest.background.service_worker, root)),
-    access(new URL(manifest.action.default_popup, root)),
-    access(new URL("content.js", root)),
-    access(new URL("capture-core.js", root)),
-    access(new URL("filename.js", root)),
-    access(new URL("semantic-html.js", root)),
-    access(new URL("offscreen.html", root)),
-    ...Object.values(manifest.icons).map((path) => access(new URL(path, root))),
+    access(new URL(manifest.background.service_worker, extensionRoot)),
+    access(new URL(manifest.action.default_popup, extensionRoot)),
+    access(new URL("content.js", extensionRoot)),
+    access(new URL("capture-core.js", extensionRoot)),
+    access(new URL("filename.js", extensionRoot)),
+    access(new URL("semantic-html.js", extensionRoot)),
+    access(new URL("offscreen.html", extensionRoot)),
+    ...Object.values(manifest.icons).map((path) => access(new URL(path, extensionRoot))),
   ]);
 });
 
 test("popup and offscreen helper expose the intended stable controls", async () => {
   const [popup, popupScript, offscreen] = await Promise.all([
-    readFile(new URL("popup.html", root), "utf8"),
-    readFile(new URL("popup.js", root), "utf8"),
-    readFile(new URL("offscreen.html", root), "utf8"),
+    readFile(new URL("popup.html", extensionRoot), "utf8"),
+    readFile(new URL("popup.js", extensionRoot), "utf8"),
+    readFile(new URL("offscreen.html", extensionRoot), "utf8"),
   ]);
   assert.match(popup, /id="clear-selection"[^>]*disabled/);
   assert.match(popup, />Clear picked content</);
@@ -47,10 +48,10 @@ test("popup and offscreen helper expose the intended stable controls", async () 
 
 test("Markdown transcript download is wired end to end", async () => {
   const [popup, content, background, offscreen] = await Promise.all([
-    readFile(new URL("popup.html", root), "utf8"),
-    readFile(new URL("content.js", root), "utf8"),
-    readFile(new URL("background.js", root), "utf8"),
-    readFile(new URL("offscreen.js", root), "utf8"),
+    readFile(new URL("popup.html", extensionRoot), "utf8"),
+    readFile(new URL("content.js", extensionRoot), "utf8"),
+    readFile(new URL("background.js", extensionRoot), "utf8"),
+    readFile(new URL("offscreen.js", extensionRoot), "utf8"),
   ]);
   assert.match(popup, /id="download-markdown"/);
   assert.match(popup, />Download Markdown</);
@@ -64,7 +65,7 @@ test("Markdown transcript download is wired end to end", async () => {
   assert.match(content, /This is a copy of a chat between Claude and/);
   assert.match(content, /editorial\.map\(\(line\) => `> /);
   assert.match(background, /capture-core\.js/);
-  assert.doesNotMatch(await readFile(new URL("popup.css", root), "utf8"), /button:disabled\s*\{[^}]*cursor:\s*wait/s);
+  assert.doesNotMatch(await readFile(new URL("popup.css", extensionRoot), "utf8"), /button:disabled\s*\{[^}]*cursor:\s*wait/s);
   assert.match(background, /DOWNLOAD_MARKDOWN/);
   assert.match(offscreen, /MAKE_MARKDOWN_URL/);
   assert.match(offscreen, /text\/markdown;charset=utf-8/);
@@ -72,11 +73,11 @@ test("Markdown transcript download is wired end to end", async () => {
 
 test("semantic HTML archive download is wired end to end", async () => {
   const [popup, popupScript, content, background, offscreen] = await Promise.all([
-    readFile(new URL("popup.html", root), "utf8"),
-    readFile(new URL("popup.js", root), "utf8"),
-    readFile(new URL("content.js", root), "utf8"),
-    readFile(new URL("background.js", root), "utf8"),
-    readFile(new URL("offscreen.js", root), "utf8"),
+    readFile(new URL("popup.html", extensionRoot), "utf8"),
+    readFile(new URL("popup.js", extensionRoot), "utf8"),
+    readFile(new URL("content.js", extensionRoot), "utf8"),
+    readFile(new URL("background.js", extensionRoot), "utf8"),
+    readFile(new URL("offscreen.js", extensionRoot), "utf8"),
   ]);
   assert.match(popup, /id="download-html"/);
   assert.match(popup, />Download semantic HTML</);

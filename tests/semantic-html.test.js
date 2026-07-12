@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-await import("../semantic-html.js");
+await import("../extension/semantic-html.js");
 
 const { buildSemanticHtml } = globalThis.GetSomeSemanticHtml;
 
