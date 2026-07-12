@@ -17,6 +17,7 @@
     sticky: "data-getsome-sticky",
     expanded: "data-getsome-expanded",
     internal: "data-getsome-internal",
+    printShell: "data-getsome-print-shell",
   };
 
   const state = {
@@ -265,6 +266,56 @@
       max-height: var(--getsome-capture-height) !important;
       overflow-y: auto !important;
     }
+    html[${ATTR.root}="searchable"] body > :not([${ATTR.printShell}]) {
+      display: none !important;
+    }
+    html[${ATTR.root}="searchable"] [${ATTR.printShell}] {
+      display: block !important;
+      box-sizing: border-box !important;
+      width: min(100%, 7.8in) !important;
+      margin: 0 auto !important;
+      padding: 0 !important;
+      color: #111 !important;
+      background: #fff !important;
+      font: 11pt/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+    }
+    html[${ATTR.root}="searchable"] [${ATTR.printShell}] * {
+      box-sizing: border-box !important;
+      max-width: 100% !important;
+      color: inherit !important;
+      background: transparent !important;
+      position: static !important;
+    }
+    html[${ATTR.root}="searchable"] [${ATTR.printShell}] section {
+      padding: 0 0 0.22in !important;
+      margin: 0 0 0.22in !important;
+      border-bottom: 1px solid #ddd !important;
+    }
+    html[${ATTR.root}="searchable"] [${ATTR.printShell}] h2 {
+      margin: 0 0 0.1in !important;
+      font-size: 14pt !important;
+    }
+    html[${ATTR.root}="searchable"] [${ATTR.printShell}] table {
+      width: 100% !important;
+      border-collapse: collapse !important;
+    }
+    html[${ATTR.root}="searchable"] [${ATTR.printShell}] th,
+    html[${ATTR.root}="searchable"] [${ATTR.printShell}] td {
+      padding: 5px 7px !important;
+      border: 1px solid #bbb !important;
+      vertical-align: top !important;
+    }
+    html[${ATTR.root}="searchable"] [${ATTR.printShell}] pre {
+      padding: 8px !important;
+      white-space: pre-wrap !important;
+      overflow-wrap: anywhere !important;
+      background: #f5f5f5 !important;
+    }
+    html[${ATTR.root}="searchable"] [${ATTR.printShell}] img {
+      display: block !important;
+      height: auto !important;
+      margin: 0.08in 0 !important;
+    }
   `;
 
   function markPath(target, mark) {
@@ -328,22 +379,16 @@
     }
   }
 
-  /** Scrolls through a finite document once so lazy content has a chance to load. */
+  /** Scrolls a generic document without refusing long or slowly growing pages. */
   async function warmDocument() {
     let y = 0;
     let steps = 0;
     const step = Math.max(400, Math.floor(innerHeight * 0.82));
-    while (y < documentHeight() - innerHeight && steps < 160) {
+    while (y < documentHeight() - innerHeight && steps < 480) {
       scrollTo({ top: y, behavior: "instant" });
       await settle(85);
       y += step;
       steps += 1;
-      if (documentHeight() > 250_000) {
-        throw new Error("This page is extremely long. Pick a smaller content region and try again.");
-      }
-    }
-    if (steps === 160 && y < documentHeight() - innerHeight) {
-      throw new Error("This page keeps growing. Pick a finite content region and try again.");
     }
     scrollTo({ top: Math.max(0, documentHeight() - innerHeight), behavior: "instant" });
     await settle(350);
@@ -559,6 +604,186 @@
       .join("\n\n");
   }
 
+  function turnOrder(turn, fallback) {
+    const testId = turn.getAttribute("data-testid") || "";
+    const number = Number.parseInt(testId.match(/conversation-turn-(\d+)/)?.[1] || "", 10);
+    return Number.isFinite(number) ? number : fallback;
+  }
+
+  function turnKey(turn, fallback) {
+    return turn.getAttribute("data-turn-id")
+      || turn.getAttribute("data-testid")
+      || `turn-${fallback}`;
+  }
+
+  function hasMeaningfulImageSize(image) {
+    const rect = image.getBoundingClientRect();
+    const width = Math.max(rect.width, image.naturalWidth || 0, Number(image.getAttribute("width")) || 0);
+    const height = Math.max(rect.height, image.naturalHeight || 0, Number(image.getAttribute("height")) || 0);
+    return width >= 48 && height >= 48;
+  }
+
+  function meaningfulTurnImages(turn, message) {
+    return [...turn.querySelectorAll("img")].filter((image) => (
+      !message.contains(image)
+      && !image.closest("button,[role='button'],[aria-hidden='true']")
+      && hasMeaningfulImageSize(image)
+    ));
+  }
+
+  function clonePrintableTurn(turn, message, role, images) {
+    const section = document.createElement("section");
+    const heading = document.createElement("h2");
+    heading.textContent = speakerLabel(role);
+    section.append(heading);
+
+    for (const image of images) {
+      const clone = image.cloneNode(false);
+      const source = image.currentSrc || image.src;
+      if (source) clone.src = source;
+      clone.removeAttribute("style");
+      section.append(clone);
+    }
+
+    const content = message.cloneNode(true);
+    for (const element of content.querySelectorAll([
+      "button", "input", "select", "textarea", "script", "style", "noscript",
+      "template", "svg", "canvas", "audio", "video", "form",
+      "[role='button']", "[role='toolbar']", "[role='navigation']",
+      "[role='dialog']", "[aria-hidden='true']",
+    ].join(","))) element.remove();
+    section.append(content);
+    return section;
+  }
+
+  function turnRecord(turn, fallback) {
+    const message = turn.querySelector("[data-message-author-role]");
+    if (!message || message.getAttribute("aria-hidden") === "true" || getComputedStyle(message).display === "none") return null;
+    const role = message.getAttribute("data-message-author-role") || "";
+    const images = meaningfulTurnImages(turn, message);
+    const textImages = [...new Set([
+      ...images,
+      ...message.querySelectorAll("img"),
+    ])].filter((image) => (
+      !image.closest("button,[role='button'],[aria-hidden='true']")
+      && hasMeaningfulImageSize(image)
+    ));
+    const imageMarkdown = images.map((image) => normalizeMarkdown(renderMarkdownNode(image))).filter(Boolean);
+    const imageText = textImages.map((image) => `[Image: ${image.getAttribute("alt") || "uploaded image"}]`);
+    const markdown = normalizeMarkdown([
+      ...imageMarkdown,
+      normalizeMarkdown(renderMarkdownChildren(message)),
+    ].filter(Boolean).join("\n\n"));
+    const text = normalizeExtractedText([
+      ...imageText,
+      message.innerText || "",
+    ].filter(Boolean).join("\n\n"));
+    if (!markdown && !text && !images.length) return null;
+    return {
+      key: turnKey(turn, fallback),
+      order: turnOrder(turn, fallback),
+      role,
+      markdown,
+      text,
+      printNode: clonePrintableTurn(turn, message, role, images),
+    };
+  }
+
+  function scrollPosition(host) {
+    return host ? host.scrollTop : scrollY;
+  }
+
+  function scrollMaximum(host) {
+    return host
+      ? Math.max(0, host.scrollHeight - host.clientHeight)
+      : Math.max(0, documentHeight() - innerHeight);
+  }
+
+  function scrollViewport(host) {
+    return host ? host.clientHeight : innerHeight;
+  }
+
+  function turnScrollPosition(turn, host) {
+    const rect = turn.getBoundingClientRect();
+    if (!host) return Math.max(0, rect.top + scrollY);
+    const hostRect = host.getBoundingClientRect();
+    return Math.max(0, rect.top - hostRect.top + host.scrollTop);
+  }
+
+  /** Collects every transiently mounted conversation turn from top to bottom. */
+  async function collectStructuredTurns(target) {
+    const initialTurns = [...target.querySelectorAll("[data-testid^='conversation-turn-']")];
+    if (initialTurns.length < 2 || !globalThis.GetSomeCaptureCore?.collectVirtualized) return null;
+    const host = isInternalScroller(target) ? target : findScrollableAncestor(target);
+
+    const snapshot = () => {
+      const turns = [...target.querySelectorAll("[data-testid^='conversation-turn-']")];
+      return {
+        expected: turns.map((turn, index) => ({
+          key: turnKey(turn, index),
+          order: turnOrder(turn, index),
+          position: turnScrollPosition(turn, host),
+        })),
+        records: turns.map(turnRecord).filter(Boolean),
+      };
+    };
+
+    const moveTo = async (requested, attempt) => {
+      const maximum = scrollMaximum(host);
+      const position = Math.min(Math.max(0, requested), maximum);
+      if (attempt > 0) {
+        const turns = [...target.querySelectorAll("[data-testid^='conversation-turn-']")];
+        const nearest = turns.sort((left, right) => (
+          Math.abs(turnScrollPosition(left, host) - position) - Math.abs(turnScrollPosition(right, host) - position)
+        ))[0];
+        nearest?.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+      }
+      if (host) {
+        host.scrollTop = position;
+        host.dispatchEvent(new Event("scroll", { bubbles: false }));
+      } else {
+        scrollTo({ left: 0, top: position, behavior: "instant" });
+      }
+    };
+
+    return globalThis.GetSomeCaptureCore.collectVirtualized({
+      snapshot,
+      moveTo,
+      currentPosition: () => scrollPosition(host),
+      maxPosition: () => scrollMaximum(host),
+      viewportSize: () => scrollViewport(host),
+      settle: (attempt) => settle(150 + attempt * 140),
+      retryCount: 3,
+      maxMilliseconds: 180_000,
+      maxSteps: 1_200,
+    });
+  }
+
+  function transcriptFromCollection(collection) {
+    return collection.records
+      .filter((record) => record.text)
+      .map((record) => `${speakerLabel(record.role)}:\n${record.text}`)
+      .join("\n\n");
+  }
+
+  function markdownFromCollection(collection) {
+    return collection.records
+      .filter((record) => record.markdown)
+      .map((record) => `## ${speakerLabel(record.role)}\n\n${record.markdown}`)
+      .join("\n\n");
+  }
+
+  function installPrintShell(collection, context) {
+    const shell = document.createElement("article");
+    shell.setAttribute(ATTR.printShell, "");
+    for (const record of collection.records) {
+      if (record.printNode) shell.append(record.printNode);
+    }
+    document.body.append(shell);
+    context.printShell = shell;
+    return shell;
+  }
+
   async function withCleanTextSource(mode, extract) {
     await restoreExport();
     state.pickerCleanup?.();
@@ -594,18 +819,34 @@
   /** Copies all visible text from the selected or automatically detected source. */
   async function extractText() {
     return withCleanTextSource("text", async (target) => {
-      const text = structuredTranscript(target) || normalizeExtractedText(target.innerText || "");
+      const collection = await collectStructuredTurns(target);
+      const text = collection
+        ? transcriptFromCollection(collection)
+        : structuredTranscript(target) || normalizeExtractedText(target.innerText || "");
       if (!text) throw new Error("No visible text was found in the selected content.");
-      return { text, description: describeElement(target) };
+      return {
+        text,
+        description: describeElement(target),
+        partial: Boolean(collection && !collection.complete),
+        missingCount: collection?.missingKeys.length || 0,
+      };
     });
   }
 
   /** Produces a portable Markdown transcript without page controls or action rows. */
   async function extractMarkdown() {
     return withCleanTextSource("markdown", async (target) => {
-      const markdown = structuredMarkdown(target) || normalizeMarkdown(renderMarkdownNode(target));
+      const collection = await collectStructuredTurns(target);
+      const markdown = collection
+        ? markdownFromCollection(collection)
+        : structuredMarkdown(target) || normalizeMarkdown(renderMarkdownNode(target));
       if (!markdown) throw new Error("No visible text was found in the selected content.");
-      return { markdown, description: describeElement(target) };
+      return {
+        markdown,
+        description: describeElement(target),
+        partial: Boolean(collection && !collection.complete),
+        missingCount: collection?.missingKeys.length || 0,
+      };
     });
   }
 
@@ -630,6 +871,22 @@
     };
     state.exportContext = context;
     const mark = makeMarker(context);
+
+    if (mode === "searchable") {
+      const collection = await collectStructuredTurns(target);
+      if (collection?.records.length >= 2) {
+        mark(document.documentElement, ATTR.root, mode);
+        context.style.textContent = BASE_EXPORT_CSS;
+        document.documentElement.append(context.style);
+        installPrintShell(collection, context);
+        await settle(120);
+        return {
+          description: describeElement(target),
+          partial: !collection.complete,
+          missingCount: collection.missingKeys.length,
+        };
+      }
+    }
 
     mark(document.documentElement, ATTR.root, mode);
     markPath(target, mark);
@@ -692,7 +949,10 @@
       const visibleHeight = Math.max(1, Math.min(hostRect.bottom, innerHeight) - Math.max(hostRect.top, 0));
       return {
         kind: "ancestor",
-        contentHeight: Math.max(targetRect.height, target.scrollHeight),
+        contentHeight: Math.min(
+          Math.max(targetRect.height, target.scrollHeight),
+          Math.max(1, host.scrollHeight - targetOffset),
+        ),
         viewportHeight: Math.min(host.clientHeight, visibleHeight),
         contentWidth: Math.min(targetRect.right, hostRect.right) - Math.max(targetRect.left, hostRect.left),
         targetOffset,
@@ -720,18 +980,33 @@
     }
     const { target, plan } = context;
 
+    const moveScroller = async (element, desired) => {
+      let actual = element.scrollTop;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        element.scrollTop = desired;
+        element.dispatchEvent(new Event("scroll", { bubbles: false }));
+        await settle(170 + attempt * 130);
+        actual = element.scrollTop;
+        if (Math.abs(actual - desired) <= 3) break;
+        const turns = [...target.querySelectorAll("[data-testid^='conversation-turn-']")];
+        const nearest = turns.sort((left, right) => (
+          Math.abs(turnScrollPosition(left, element) - desired)
+          - Math.abs(turnScrollPosition(right, element) - desired)
+        ))[0];
+        nearest?.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+      }
+      return actual;
+    };
+
     if (plan.kind === "element") {
       const total = target.scrollHeight;
+      if (coverage >= total) return { done: true, contentHeight: total };
       const viewportHeight = target.clientHeight;
       const desiredScroll = Math.min(coverage, Math.max(0, total - viewportHeight));
-      target.scrollTop = desiredScroll;
-      target.dispatchEvent(new Event("scroll", { bubbles: false }));
-      await settle(170);
-
-      const actualScroll = target.scrollTop;
+      const actualScroll = await moveScroller(target, desiredScroll);
       const offset = Math.max(0, coverage - actualScroll);
       const height = Math.min(viewportHeight - offset, total - coverage);
-      if (height < 1) throw new Error("The selected viewer would not scroll far enough to capture.");
+      if (height < 1) return { done: true, incomplete: true, contentHeight: total };
       const rect = target.getBoundingClientRect();
       return {
         contentHeight: total,
@@ -747,25 +1022,29 @@
     if (plan.kind === "ancestor") {
       const host = context.scrollHost;
       if (!host?.isConnected) throw new Error("The page replaced its scrolling region during capture.");
-      const total = Math.max(target.getBoundingClientRect().height, target.scrollHeight);
+      const total = Math.min(
+        Math.max(target.getBoundingClientRect().height, target.scrollHeight),
+        Math.max(1, host.scrollHeight - plan.targetOffset),
+      );
+      if (coverage >= total) return { done: true, contentHeight: total };
       const desiredScroll = Math.min(plan.targetOffset + coverage, Math.max(0, host.scrollHeight - host.clientHeight));
-      host.scrollTop = desiredScroll;
-      host.dispatchEvent(new Event("scroll", { bubbles: false }));
-      await settle(190);
+      await moveScroller(host, desiredScroll);
 
       const visibleStart = Math.max(0, host.scrollTop - plan.targetOffset);
       const offset = Math.max(0, coverage - visibleStart);
-      const height = Math.min(plan.viewportHeight - offset, total - coverage);
-      if (height < 1) throw new Error("The page stopped scrolling before all selected content was captured.");
       const hostRect = host.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
+      const captureTop = Math.max(targetRect.top + coverage, hostRect.top, 0);
+      const visibleBottom = Math.min(hostRect.bottom, innerHeight);
+      const height = Math.min(plan.viewportHeight - offset, total - coverage, visibleBottom - captureTop);
+      if (height < 1) return { done: true, incomplete: true, contentHeight: total };
       const left = Math.max(targetRect.left, hostRect.left);
       const right = Math.min(targetRect.right, hostRect.right);
       return {
         contentHeight: total,
         clip: {
           x: left + scrollX,
-          y: targetRect.top + scrollY + coverage,
+          y: captureTop + scrollY,
           width: right - left,
           height,
         },
@@ -785,6 +1064,7 @@
     targetTop = rect.top + scrollY;
     const total = context.target === document.body ? documentHeight() : Math.max(rect.height, context.target.scrollHeight);
     const height = Math.min(plan.viewportHeight, total - coverage);
+    if (height < 1) return { done: true, contentHeight: total };
     return {
       contentHeight: total,
       clip: {
@@ -802,6 +1082,7 @@
     if (!context) return { restored: false };
     state.exportContext = null;
 
+    context.printShell?.remove();
     context.style.remove();
     if (context.removeCaptureProperty && context.target?.isConnected) {
       if (context.capturePropertyValue) {

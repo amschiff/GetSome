@@ -12,7 +12,7 @@ let selectionIsManual = false;
 async function ensurePageHelper() {
   await chrome.scripting.executeScript({
     target: { tabId: activeTabId },
-    files: ["content.js"],
+    files: ["capture-core.js", "content.js"],
   });
 }
 
@@ -73,7 +73,9 @@ async function copyAllText() {
   const result = await sendToPage("EXTRACT_TEXT");
   if (!result?.text) throw new Error("No visible text was found in the selected content.");
   await writeClipboard(result.text);
-  setBusy(false, `Copied ${result.text.length.toLocaleString()} characters.`);
+  setBusy(false, result.partial
+    ? `Copied the available text; ${result.missingCount} virtual turns did not render after retries.`
+    : `Copied ${result.text.length.toLocaleString()} characters.`);
 }
 
 async function downloadMarkdown() {
@@ -83,7 +85,9 @@ async function downloadMarkdown() {
     tabId: activeTabId,
   });
   if (!result?.ok) throw new Error(result?.error || "The Markdown file could not be created.");
-  setBusy(false, "The Save As dialog is open.");
+  setBusy(false, result.partial
+    ? `The Save As dialog is open; ${result.missingCount} virtual turns did not render after retries.`
+    : "The Save As dialog is open.");
 }
 
 async function startExport(mode) {
@@ -94,7 +98,9 @@ async function startExport(mode) {
     mode,
   });
   if (!result?.ok) throw new Error(result?.error || "The PDF could not be created.");
-  setBusy(false, "The Save As dialog is open.");
+  setBusy(false, result.partial
+    ? `A partial PDF Save As dialog is open. ${result.partialReason}`
+    : "The Save As dialog is open.");
 }
 
 document.querySelector("#pick-content").addEventListener("click", async () => {

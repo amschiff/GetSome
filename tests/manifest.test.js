@@ -22,6 +22,7 @@ test("manifest references packaged extension files", async () => {
     access(new URL(manifest.background.service_worker, root)),
     access(new URL(manifest.action.default_popup, root)),
     access(new URL("content.js", root)),
+    access(new URL("capture-core.js", root)),
     access(new URL("offscreen.html", root)),
     ...Object.values(manifest.icons).map((path) => access(new URL(path, root))),
   ]);
@@ -50,6 +51,9 @@ test("Markdown transcript download is wired end to end", async () => {
   assert.match(popup, />Download Markdown</);
   assert.match(content, /data-message-author-role/);
   assert.match(content, /EXTRACT_MARKDOWN/);
+  assert.match(content, /collectStructuredTurns/);
+  assert.match(background, /capture-core\.js/);
+  assert.doesNotMatch(await readFile(new URL("popup.css", root), "utf8"), /button:disabled\s*\{[^}]*cursor:\s*wait/s);
   assert.match(background, /DOWNLOAD_MARKDOWN/);
   assert.match(offscreen, /MAKE_MARKDOWN_URL/);
   assert.match(offscreen, /text\/markdown;charset=utf-8/);
