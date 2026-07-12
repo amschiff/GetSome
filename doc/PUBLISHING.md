@@ -4,7 +4,7 @@ GetSome 0.7.0 is technically suitable for a public source repository. This docum
 
 ## Public GitHub repository
 
-- Choose and add a license. With no license, people may view the public source but do not receive general permission to copy, modify, or distribute it.
+- Confirm that the repository displays its [Creative Commons Attribution 4.0 International license](../LICENSE.txt) correctly.
 - Add the eventual repository URL and contact route to the project metadata and privacy policy.
 - Confirm that no test downloads, private conversations, screenshots with private data, browser profiles, or local configuration files are committed.
 - Add screenshots made from a non-sensitive sample conversation.

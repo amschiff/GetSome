@@ -2,6 +2,7 @@
   "name": "getsome-chrome-extension",
   "version": "0.7.0",
   "private": true,
+  "license": "CC-BY-4.0",
   "type": "module",
   "scripts": {
     "check": "node --check extension/background.js && node --check extension/capture-core.js && node --check extension/content.js && node --check extension/filename.js && node --check extension/offscreen.js && node --check extension/pdf.js && node --check extension/popup.js && node --check extension/semantic-html.js",

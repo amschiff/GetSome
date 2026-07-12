@@ -54,4 +54,4 @@ npm run check
 npm test
 ```
 
-The project is currently a source-installable pre-release. No license has been selected yet; add one before inviting reuse or contributions.
+The project is currently a source-installable pre-release. It is licensed under [Creative Commons Attribution 4.0 International](LICENSE.txt).
