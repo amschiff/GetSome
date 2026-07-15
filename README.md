@@ -1,4 +1,4 @@
-# GetSome (Version 0.7.0, last edit 12Jul26)
+# GetSome (Version 0.1, last edit 14Jul26)
 
 *Take the whole conversation with you.*
 
@@ -58,5 +58,3 @@ GetSome was developed collaboratively with OpenAI Codex 5.6 Sol; see the [techni
 npm run check
 npm test
 ```
-
-The project is currently a source-installable pre-release. It is licensed under [Creative Commons Attribution 4.0 International](LICENSE.txt).
