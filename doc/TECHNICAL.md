@@ -1,6 +1,6 @@
-# GetSome Technical Reference (last edit 12Jul26)
+# GetSome Technical Reference (last edit 15Jul26)
 
-This document describes the implementation and maintenance boundaries of GetSome 0.7.0. The user-facing introduction belongs in the repository [README](../README.md).
+This document describes the implementation and maintenance boundaries of GetSome 0.1. The user-facing introduction belongs in the repository [README](../README.md).
 
 ## Runtime structure
 
@@ -102,7 +102,7 @@ npm test
 
 The automated tests cover manifest wiring, filename compaction, semantic HTML attribution and metadata clipping, multi-page PDF assembly, disappearing virtualized slices, ignored scroll requests, permanently missing turns, inactive branches, discovery from mounted slices, tables, image-only turns, uploaded media references, and click/Shift/Option selection semantics.
 
-Live validation is still necessary because provider DOMs are external and change without notice. Version 0.7.0 was exercised on both shared and signed-in chat pages where available. The validation conversations included long threads, tables, uploaded images, generated content, sidebars, and virtualized turns. The tested providers were ChatGPT, Claude, Gemini, and Grok.
+Live validation is still necessary because provider DOMs are external and change without notice. Version 0.1 was exercised on both shared and signed-in chat pages where available. The validation conversations included long threads, tables, uploaded images, generated content, sidebars, and virtualized turns. The tested providers were ChatGPT, Claude, Gemini, and Grok.
 
 For a release candidate, repeat a full-conversation semantic HTML and Markdown export on each provider, inspect first and last turns, count roles, check tables and media, and test both PDF modes on at least one long virtualized conversation.
 

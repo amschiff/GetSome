@@ -1,10 +1,10 @@
-# GetSome Public Release Guide (last edit 12Jul26)
+# GetSome Public Release Guide (last edit 15Jul26)
 
-GetSome 0.7.0 is technically suitable for a public source repository. This document first covers that practical goal. Chrome Web Store publication is speculative; its separate section records issues that would matter only if store distribution is considered later.
+GetSome 0.1 is technically suitable for a public source repository. This document first covers that practical goal. Chrome Web Store publication is speculative; its separate section records issues that would matter only if store distribution is considered later.
 
 ## Public GitHub repository
 
-- Confirm that the repository displays its [Creative Commons Attribution 4.0 International license](../LICENSE.txt) correctly.
+- Confirm that the repository displays its [MIT License](../LICENSE.txt) correctly.
 - Add the eventual repository URL and contact route to the project metadata and privacy policy.
 - Confirm that no test downloads, private conversations, screenshots with private data, browser profiles, or local configuration files are committed.
 - Add screenshots made from a non-sensitive sample conversation.
